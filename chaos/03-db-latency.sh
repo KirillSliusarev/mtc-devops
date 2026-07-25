@@ -3,7 +3,7 @@ set -euo pipefail
 
 # =============================================================================
 # Сценарий 3: DB Latency — задержка между backend и PostgreSQL
-# Mesh-level fault injection на backend (влияет на /api/ через gateway)
+# Модифицирует gateway VirtualService (demo-vs) для fault injection
 # =============================================================================
 
 NAMESPACE="demo-app"
@@ -24,38 +24,59 @@ echo ""
 echo ">>> Нажми Enter чтобы внедрить задержку <<<"
 read -r
 
-echo "Внедрение задержки ${DELAY} на ВСЕ запросы к backend..."
+echo "Внедрение задержки ${DELAY} на ВСЕ запросы к /api/..."
 cat <<EOF | kubectl apply -f -
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
-  name: backend-latency
+  name: demo-vs
   namespace: ${NAMESPACE}
 spec:
-  hosts:
-  - backend
+  hosts: ['*']
+  gateways: [demo-gateway]
   http:
-  - fault:
+  - match: [{uri: {prefix: /api/}}]
+    fault:
       delay:
-        percentage:
-          value: 100
+        percentage: {value: 100}
         fixedDelay: ${DELAY}
     route:
-    - destination:
-        host: backend
-        port:
-          number: 5000
+    - destination: {host: backend, port: {number: 5000}}
+  - match: [{uri: {prefix: /health}}]
+    route:
+    - destination: {host: backend, port: {number: 5000}}
+  - route:
+    - destination: {host: frontend, port: {number: 80}}
 EOF
 echo "Готово!"
 echo ""
 echo "СМОТРИ В БРАУЗЕР:"
-echo "  📊 Приложение: DB response вырастет до ~3000ms+"
+echo "  📊 DB response вырастет до ~3000ms+"
 echo "  📈 Grafana → Istio Service: spike latency"
 echo ""
 echo ">>> Нажми Enter чтобы откатить <<<"
 read -r
 
-kubectl delete virtualservice backend-latency -n "${NAMESPACE}" --ignore-not-found
+# Откат
+cat <<EOF | kubectl apply -f -
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: demo-vs
+  namespace: ${NAMESPACE}
+spec:
+  hosts: ['*']
+  gateways: [demo-gateway]
+  http:
+  - match: [{uri: {prefix: /api/}}]
+    route:
+    - destination: {host: backend, port: {number: 5000}}
+  - match: [{uri: {prefix: /health}}]
+    route:
+    - destination: {host: backend, port: {number: 5000}}
+  - route:
+    - destination: {host: frontend, port: {number: 80}}
+EOF
 echo "Задержка снята."
 echo ""
 echo "✓ Сценарий 3 завершён"

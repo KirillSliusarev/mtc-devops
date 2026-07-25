@@ -67,13 +67,13 @@ if [ -n "${TARGET_PASSWORD}" ]; then
     sshpass -p "${TARGET_PASSWORD}" ssh -o StrictHostKeyChecking=no -p "${TARGET_PORT}" \
         "${TARGET_USER}@${TARGET_HOST}" "mkdir -p /tmp/mtc-devops"
     sshpass -p "${TARGET_PASSWORD}" scp -o StrictHostKeyChecking=no -P "${TARGET_PORT}" \
-        -r /ansible/chaos /ansible/docs /ansible/README.md \
+        -r /ansible/chaos /ansible/README.md /ansible/CHAOS_RESEARCH.md \
         "${TARGET_USER}@${TARGET_HOST}:/tmp/mtc-devops/"
 else
     ssh -o StrictHostKeyChecking=no -p "${TARGET_PORT}" \
         "${TARGET_USER}@${TARGET_HOST}" "mkdir -p /tmp/mtc-devops"
     scp -P "${TARGET_PORT}" \
-        -r /ansible/chaos /ansible/docs /ansible/README.md \
+        -r /ansible/chaos /ansible/README.md /ansible/CHAOS_RESEARCH.md \
         "${TARGET_USER}@${TARGET_HOST}:/tmp/mtc-devops/"
 fi
 

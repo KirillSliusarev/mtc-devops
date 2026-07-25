@@ -3,8 +3,7 @@ set -euo pipefail
 
 # =============================================================================
 # Сценарий 1: HTTP Latency — задержка ответа frontend→backend
-# Mesh-level fault injection: применяет VS на host=backend
-# Это влияет на ВЕСЬ трафик к backend (из gateway, из frontend, отовсюду)
+# Модифицирует gateway VirtualService (demo-vs) для fault injection
 # =============================================================================
 
 NAMESPACE="demo-app"
@@ -27,38 +26,59 @@ echo ""
 echo ">>> Нажми Enter чтобы внедрить задержку <<<"
 read -r
 
-echo "Внедрение задержки ${DELAY} на ${PERCENT}% запросов к backend..."
+echo "Внедрение задержки ${DELAY} на ${PERCENT}% запросов..."
 cat <<EOF | kubectl apply -f -
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
-  name: backend-latency
+  name: demo-vs
   namespace: ${NAMESPACE}
 spec:
-  hosts:
-  - backend
+  hosts: ['*']
+  gateways: [demo-gateway]
   http:
-  - fault:
+  - match: [{uri: {prefix: /api/}}]
+    fault:
       delay:
-        percentage:
-          value: ${PERCENT}
+        percentage: {value: ${PERCENT}}
         fixedDelay: ${DELAY}
     route:
-    - destination:
-        host: backend
-        port:
-          number: 5000
+    - destination: {host: backend, port: {number: 5000}}
+  - match: [{uri: {prefix: /health}}]
+    route:
+    - destination: {host: backend, port: {number: 5000}}
+  - route:
+    - destination: {host: frontend, port: {number: 80}}
 EOF
-echo "Готово! Задержка активна."
+echo "Готово!"
 echo ""
 echo "СМОТРИ В БРАУЗЕР:"
-echo "  📊 Приложение: ~50% запросов к /api/ будут идти 5+ секунд"
-echo "  📈 Grafana → Istio Service: spike p95 latency до 5s"
+echo "  📊 ~50% запросов к /api/ будут идти 5+ секунд"
+echo "  📈 Grafana → Istio Service: spike p95 latency"
 echo ""
 echo ">>> Нажми Enter чтобы откатить <<<"
 read -r
 
-kubectl delete virtualservice backend-latency -n "${NAMESPACE}" --ignore-not-found
+# Откат
+cat <<EOF | kubectl apply -f -
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: demo-vs
+  namespace: ${NAMESPACE}
+spec:
+  hosts: ['*']
+  gateways: [demo-gateway]
+  http:
+  - match: [{uri: {prefix: /api/}}]
+    route:
+    - destination: {host: backend, port: {number: 5000}}
+  - match: [{uri: {prefix: /health}}]
+    route:
+    - destination: {host: backend, port: {number: 5000}}
+  - route:
+    - destination: {host: frontend, port: {number: 80}}
+EOF
 echo "Задержка снята."
 echo ""
 echo "✓ Сценарий 1 завершён"

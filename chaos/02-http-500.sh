@@ -3,6 +3,8 @@ set -euo pipefail
 
 # =============================================================================
 # Сценарий 2: HTTP 500 — Harbor core возвращает ошибки
+# Fault injection через mesh-level VirtualService на harbor-core
+# Тестируется через kubectl exec (portal → core = mesh traffic)
 # =============================================================================
 
 HARBOR_NS="harbor"
@@ -29,24 +31,29 @@ metadata:
   name: harbor-core-500
   namespace: ${HARBOR_NS}
 spec:
-  hosts:
-  - harbor-core
+  hosts: [harbor-core]
   http:
   - fault:
       abort:
-        percentage:
-          value: ${PERCENT}
+        percentage: {value: ${PERCENT}}
         httpStatus: 500
     route:
-    - destination:
-        host: harbor-core
-        port:
-          number: 80
+    - destination: {host: harbor-core, port: {number: 80}}
 EOF
 echo "Готово!"
 echo ""
+
+echo "Проверка (frontend → harbor-core = mesh traffic):"
+for i in 1 2 3 4 5 6; do
+    CODE=$(kubectl exec -n demo-app deployment/frontend -c frontend -- \
+        wget -S -q -O /dev/null http://harbor-core.harbor.svc.cluster.local:80/ 2>&1 | \
+        grep 'HTTP/' | tail -1 | awk '{print $2}')
+    echo "  Запрос ${i}: HTTP ${CODE}"
+done
+echo ""
+
 echo "СМОТРИ В БРАУЗЕР:"
-echo "  🐳 Harbor UI: обнови страницу (F5) 5-6 раз — будут ошибки 500"
+echo "  🐳 Harbor UI: обнови страницу (F5) несколько раз — будут ошибки"
 echo "  📈 Grafana → Istio Service: рост error rate"
 echo ""
 echo ">>> Нажми Enter чтобы откатить <<<"
