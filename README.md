@@ -53,6 +53,7 @@ Docker-контейнер с Ansible подключается к ВМ по SSH �
 
 ## Доступы после развёртывания
 
+- **Grafana:** `http://<VM-IP>:30000` (admin / admin) — дашборды Istio Mesh, Service, Workload
 - **Harbor UI:** `http://<VM-IP>:30002` (admin / Harbor12345)
 - **Istio Ingress Gateway:** `http://<VM-IP>:30133`
 

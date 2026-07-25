@@ -32,3 +32,9 @@
   become: true
   roles:
     - app
+
+- name: Deploy monitoring (Prometheus + Grafana)
+  hosts: all
+  become: true
+  roles:
+    - monitoring

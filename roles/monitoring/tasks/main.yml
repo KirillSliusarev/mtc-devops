@@ -1,0 +1,135 @@
+---
+# Monitoring role: kube-prometheus-stack (lightweight)
+# Prometheus + Grafana + Istio metrics
+# During chaos demo pauses, examiner checks Grafana to see degradation.
+
+- name: Add prometheus-community Helm repo
+  ansible.builtin.shell: |
+    helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+    helm repo update
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  changed_when: false
+
+- name: Create monitoring namespace
+  ansible.builtin.shell: |
+    kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  changed_when: false
+
+- name: Check if kube-prometheus-stack is installed
+  ansible.builtin.shell: helm list -n monitoring -o json 2>/dev/null | grep -q kube-prometheus
+  register: monitoring_check
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  changed_when: false
+  failed_when: false
+
+- name: Write monitoring values
+  ansible.builtin.copy:
+    dest: /tmp/monitoring-values.yaml
+    content: |
+      # Minimal resources for single-node k3s
+      prometheus:
+        prometheusSpec:
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          retention: 2h
+          scrapeInterval: 15s
+      
+      grafana:
+        enabled: true
+        image:
+          tag: 10.4.1
+        adminPassword: "admin"
+        service:
+          type: NodePort
+          nodePort: 30000
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        dashboardProviders:
+          dashboardproviders.yaml:
+            apiVersion: 1
+            providers:
+            - name: 'chaos'
+              orgId: 1
+              folder: 'Chaos Engineering'
+              type: file
+              disableDeletion: false
+              editable: true
+              options:
+                path: /var/lib/grafana/dashboards/chaos
+        dashboards:
+          chaos:
+            istio-mesh:
+              gnetId: 7639
+              revision: 22
+              datasource: Prometheus
+            istio-service:
+              gnetId: 7636
+              revision: 22
+              datasource: Prometheus
+            istio-workload:
+              gnetId: 7630
+              revision: 22
+              datasource: Prometheus
+      
+      # Disable heavy components
+      alertmanager:
+        enabled: false
+      nodeExporter:
+        enabled: true
+        resources:
+          requests:
+            cpu: 25m
+            memory: 32Mi
+          limits:
+            cpu: 50m
+            memory: 64Mi
+      
+      kubeStateMetrics:
+        resources:
+          requests:
+            cpu: 25m
+            memory: 32Mi
+          limits:
+            cpu: 50m
+            memory: 64Mi
+
+- name: Install or upgrade kube-prometheus-stack
+  ansible.builtin.command: >
+    helm upgrade --install kube-prometheus
+    prometheus-community/kube-prometheus-stack
+    -n monitoring
+    -f /tmp/monitoring-values.yaml
+    --timeout 5m
+    --wait
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+- name: Wait for monitoring pods
+  ansible.builtin.command: >
+    kubectl wait --for=condition=Ready pods --all
+    -n monitoring --timeout=300s
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  changed_when: false
+
+- name: Display monitoring info
+  ansible.builtin.debug:
+    msg:
+      - "Monitoring deployed!"
+      - "Grafana: http://{{ ansible_host }}:30000 (admin / admin)"
+      - "Dashboards: Chaos Engineering → Istio Mesh, Istio Service, Istio Workload"
+      - "During chaos demo: watch p95 latency, error rate, success rate"
