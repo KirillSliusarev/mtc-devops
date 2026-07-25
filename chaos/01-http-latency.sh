@@ -35,7 +35,7 @@ metadata:
   namespace: ${NAMESPACE}
 spec:
   hosts: ['*']
-  gateways: [demo-gateway]
+  gateways: ['istio-system/demo-gateway']
   http:
   - match: [{uri: {prefix: /api/}}]
     fault:
@@ -68,7 +68,7 @@ metadata:
   namespace: ${NAMESPACE}
 spec:
   hosts: ['*']
-  gateways: [demo-gateway]
+  gateways: ['istio-system/demo-gateway']
   http:
   - match: [{uri: {prefix: /api/}}]
     route:
