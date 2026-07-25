@@ -1,20 +1,14 @@
 ---
 # Sample application deployment role
-# Deploys frontend + backend + DB + Istio Gateway
+# Uses kubectl apply directly (no Python kubernetes dependency)
 
-- name: Create demo-app namespace with Istio injection
-  kubernetes.core.k8s:
-    state: present
-    src: "{{ role_path }}/../../manifests/app/app.yml"
-    kubeconfig: /etc/rancher/k3s/k3s.yaml
-    wait: true
-    wait_timeout: 180
-
-- name: Deploy Istio Gateway and VirtualService
-  kubernetes.core.k8s:
-    state: present
-    src: "{{ role_path }}/../../manifests/app/gateway.yml"
-    kubeconfig: /etc/rancher/k3s/k3s.yaml
+- name: Deploy application manifests
+  ansible.builtin.shell: |
+    kubectl apply -f {{ role_path }}/../../manifests/app/app.yml
+    kubectl apply -f {{ role_path }}/../../manifests/app/gateway.yml
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  changed_when: false
 
 - name: Wait for application pods to be ready
   ansible.builtin.command: >
@@ -27,8 +21,7 @@
 - name: Display application access info
   ansible.builtin.debug:
     msg:
-      - "================================================"
       - "Application deployed!"
-      - "App URL: http://{{ ansible_host }}:30080"
-      - "Check: kubectl get pods -n demo-app"
-      - "================================================"
+      - "Frontend (via Istio Ingress): http://{{ ansible_host }}:30080 (if NodePort configured)"
+      - "Harbor UI: http://{{ ansible_host }}:30002"
+      - "Check pods: kubectl get pods -n demo-app"

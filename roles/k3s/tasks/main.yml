@@ -76,17 +76,21 @@
     group: "{{ ansible_user_id }}"
     mode: "0700"
 
-- name: "k3s | Copy kubeconfig for current user and fix server endpoint"
-  ansible.builtin.shell: |
-    set -o pipefail
-    src="/etc/rancher/k3s/k3s.yaml"
-    dst="{{ ansible_env.HOME }}/.kube/config"
-    # Replace default localhost endpoint with the node's external IP.
-    sed "s|127.0.0.1|{{ ansible_host }}|g; s|default|{{ ansible_user_id }}-cluster|g" "$src" > "$dst"
-    chmod 600 "$dst"
-    chown {{ ansible_user_id }}:{{ ansible_user_id }} "$dst"
-  args:
-    creates: "{{ ansible_env.HOME }}/.kube/config"
+- name: "k3s | Copy kubeconfig for current user"
+  ansible.builtin.copy:
+    src: /etc/rancher/k3s/k3s.yaml
+    dest: "{{ ansible_env.HOME }}/.kube/config"
+    remote_src: true
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
+    mode: "0600"
+  become: true
+
+- name: "k3s | Fix server endpoint in kubeconfig"
+  ansible.builtin.replace:
+    path: "{{ ansible_env.HOME }}/.kube/config"
+    regexp: '127\.0\.0\.1'
+    replace: "{{ ansible_host }}"
   become: true
 
 # ---------------------------------------------------------------------------
@@ -114,3 +118,24 @@
 - name: "k3s | Show kubectl version"
   ansible.builtin.debug:
     var: kubectl_version.stdout_lines
+
+# Install Helm 3
+- name: "k3s | Check if helm is installed"
+  ansible.builtin.command: which helm
+  register: helm_check
+  changed_when: false
+  failed_when: false
+
+- name: "k3s | Download and install Helm 3"
+  ansible.builtin.shell: |
+    curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+  when: helm_check.rc != 0
+
+- name: "k3s | Verify helm installation"
+  ansible.builtin.command: helm version --short
+  register: helm_version
+  changed_when: false
+
+- name: "k3s | Show helm version"
+  ansible.builtin.debug:
+    var: helm_version.stdout

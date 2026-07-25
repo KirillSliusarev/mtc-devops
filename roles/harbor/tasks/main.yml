@@ -1,41 +1,35 @@
 ---
 # Harbor registry installation role
-# Deploys Harbor via Helm with minimal resource footprint (1 replica each)
+# Uses helm CLI directly (no Python kubernetes dependency)
 
-- name: Add Harbor Helm repository
-  kubernetes.core.helm_repository:
-    name: harbor
-    repo_url: https://helm.goharbor.io
-    kubeconfig: /etc/rancher/k3s/k3s.yaml
-
-- name: Create Harbor namespace
-  kubernetes.core.k8s:
-    state: present
-    definition:
-      apiVersion: v1
-      kind: Namespace
-      metadata:
-        name: harbor
-        labels:
-          istio-injection: enabled
-    kubeconfig: /etc/rancher/k3s/k3s.yaml
-
-- name: Check if Harbor is already installed
-  kubernetes.core.helm_info:
-    name: harbor
-    namespace: harbor
-    kubeconfig: /etc/rancher/k3s/k3s.yaml
-  register: harbor_check
-  failed_when: false
+- name: Create Harbor namespace with Istio injection
+  ansible.builtin.shell: |
+    kubectl create namespace harbor --dry-run=client -o yaml | kubectl apply -f -
+    kubectl label namespace harbor istio-injection=enabled --overwrite
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
   changed_when: false
 
-- name: Install Harbor via Helm
-  kubernetes.core.helm:
-    name: harbor
-    chart_ref: harbor/harbor
-    release_namespace: harbor
-    kubeconfig: /etc/rancher/k3s/k3s.yaml
-    values:
+- name: Add Harbor Helm repository
+  ansible.builtin.shell: |
+    helm repo add harbor https://helm.goharbor.io
+    helm repo update
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  changed_when: false
+
+- name: Check if Harbor is already installed
+  ansible.builtin.shell: helm list -n harbor -o json 2>/dev/null | grep -q harbor
+  register: harbor_check
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  changed_when: false
+  failed_when: false
+
+- name: Write Harbor values file
+  ansible.builtin.copy:
+    dest: /tmp/harbor-values.yaml
+    content: |
       expose:
         type: nodePort
         tls:
@@ -46,7 +40,6 @@
               nodePort: 30002
       externalURL: "http://{{ ansible_host }}:30002"
       harborAdminPassword: "{{ harbor_admin_password | default('Harbor12345') }}"
-      # Minimal resources — 1 replica for each component
       core:
         replicas: 1
         resources:
@@ -86,18 +79,23 @@
         persistentVolumeClaim:
           registry:
             size: 5Gi
-      # Disable components not needed for MVP
       trivy:
         enabled: false
       notary:
         enabled: false
       chartmuseum:
         enabled: false
-    wait: true
-    wait_timeout: 5m
-  when: harbor_check.status is undefined or harbor_check.status | length == 0
+
+- name: Install Harbor via Helm
+  ansible.builtin.command: >
+    helm install harbor harbor/harbor
+    -n harbor
+    -f /tmp/harbor-values.yaml
+    --timeout 5m
+    --wait
   environment:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  when: harbor_check.rc != 0
 
 - name: Wait for Harbor to be ready
   ansible.builtin.command: >

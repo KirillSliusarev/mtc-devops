@@ -49,14 +49,9 @@
   changed_when: false
 
 - name: Enable Istio injection for demo-app namespace
-  kubernetes.core.k8s:
-    state: present
-    definition:
-      apiVersion: v1
-      kind: Namespace
-      metadata:
-        name: demo-app
-        labels:
-          istio-injection: enabled
-    kubeconfig: /etc/rancher/k3s/k3s.yaml
-  when: istio_ns_check.rc != 0
+  ansible.builtin.shell: |
+    kubectl create namespace demo-app --dry-run=client -o yaml | kubectl apply -f -
+    kubectl label namespace demo-app istio-injection=enabled --overwrite
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  changed_when: false
