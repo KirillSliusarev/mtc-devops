@@ -55,3 +55,11 @@
   environment:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
   changed_when: false
+
+- name: Patch Istio Ingress Gateway to expose port 8080
+  ansible.builtin.shell: |
+    kubectl patch svc istio-ingressgateway -n istio-system --type='json' \
+      -p='[{"op":"replace","path":"/spec/ports/1","value":{"name":"http2","nodePort":30133,"port":8080,"protocol":"TCP","targetPort":8080}}]'
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  changed_when: false

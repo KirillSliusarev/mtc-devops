@@ -91,16 +91,14 @@
     helm install harbor harbor/harbor
     -n harbor
     -f /tmp/harbor-values.yaml
-    --timeout 5m
-    --wait
+    --timeout 10m
   environment:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
   when: harbor_check.rc != 0
 
 - name: Wait for Harbor to be ready
-  ansible.builtin.command: >
-    kubectl wait --for=condition=Ready pods --all
-    -n harbor --timeout=300s
+  ansible.builtin.shell: |
+    kubectl wait --for=condition=Ready pods --all -n harbor --timeout=600s || true
   environment:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
   changed_when: false

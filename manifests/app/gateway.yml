@@ -1,17 +1,17 @@
 ---
-# Istio Gateway — единая точка входа на порт 30133
-# Маршруты: / → frontend, /api/ и /health → backend
+# Istio Gateway — единая точка входа
+# Порт 8080 (непривилегированный, т.к. IG pod работает не от root)
 apiVersion: networking.istio.io/v1beta1
 kind: Gateway
 metadata:
   name: demo-gateway
-  namespace: demo-app
+  namespace: istio-system
 spec:
   selector:
     istio: ingressgateway
   servers:
   - port:
-      number: 80
+      number: 8080
       name: http
       protocol: HTTP
     hosts:
@@ -26,9 +26,8 @@ spec:
   hosts:
   - "*"
   gateways:
-  - demo-gateway
+  - istio-system/demo-gateway
   http:
-  # API routes → backend
   - match:
     - uri:
         prefix: /api/
@@ -45,7 +44,6 @@ spec:
         host: backend
         port:
           number: 5000
-  # Everything else → frontend
   - route:
     - destination:
         host: frontend
