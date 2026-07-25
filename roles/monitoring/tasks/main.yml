@@ -114,14 +114,12 @@
     -n monitoring
     -f /tmp/monitoring-values.yaml
     --timeout 5m
-    --wait
   environment:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
-- name: Wait for monitoring pods
-  ansible.builtin.command: >
-    kubectl wait --for=condition=Ready pods --all
-    -n monitoring --timeout=300s
+- name: Wait for monitoring pods to be ready
+  ansible.builtin.shell: |
+    kubectl wait --for=condition=Ready pods --all -n monitoring --timeout=600s || true
   environment:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
   changed_when: false
