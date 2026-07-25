@@ -1,7 +1,7 @@
 ---
 # Sample multi-tier application for Chaos Engineering demo
-# Frontend (nginx, NodePort 30080) → Backend (python+psycopg2) → DB (postgres)
-# Open in browser: http://<VM-IP>:30080
+# Frontend (nginx) → Backend (python+psycopg2) → DB (postgres)
+# All accessible through Istio Gateway: http://<VM-IP>:30133
 
 apiVersion: v1
 kind: Namespace
@@ -103,13 +103,12 @@ metadata:
   name: frontend
   namespace: demo-app
 spec:
-  type: NodePort
+  type: ClusterIP
   selector:
     app: frontend
   ports:
   - port: 80
     targetPort: 80
-    nodePort: 30080
     name: http
 ---
 # Backend (real DB connection via psycopg2)
@@ -246,13 +245,12 @@ metadata:
   name: backend
   namespace: demo-app
 spec:
-  type: NodePort
+  type: ClusterIP
   selector:
     app: backend
   ports:
   - port: 5000
     targetPort: 5000
-    nodePort: 30081
     name: http
 ---
 # Database
