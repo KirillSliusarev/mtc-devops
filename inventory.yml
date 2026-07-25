@@ -1,0 +1,19 @@
+all:
+  hosts:
+    target:
+      ansible_host: 192.168.0.40
+      ansible_port: 2222
+      ansible_user: kirill
+      ansible_password: somepassword
+      ansible_become: true
+      ansible_become_password: somepassword
+      ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+  vars:
+    k3s_version: "v1.29.3+k3s1"
+    harbor_version: "v2.10.0"
+    harbor_admin_password: "Harbor12345"
+    harbor_expose_core_port: 30002
+    app_namespace: "demo-app"
+    istio_namespace: "istio-system"
+    istio_version: "1.21.0"
+    istio_profile: "default"

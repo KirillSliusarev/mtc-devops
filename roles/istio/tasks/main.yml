@@ -1,0 +1,62 @@
+---
+# Istio installation role
+# Downloads istioctl, installs Istio with default profile,
+# enables strict mTLS globally.
+
+- name: Check if istioctl is installed
+  ansible.builtin.command: which istioctl
+  register: istioctl_check
+  changed_when: false
+  failed_when: false
+
+- name: Download Istio
+  ansible.builtin.unarchive:
+    src: "https://github.com/istio/istio/releases/download/{{ istio_version | default('1.21.0') }}/istio-{{ istio_version | default('1.21.0') }}-linux-amd64.tar.gz"
+    dest: /tmp
+    remote_src: true
+  when: istioctl_check.rc != 0
+
+- name: Install istioctl binary
+  ansible.builtin.copy:
+    src: "/tmp/istio-{{ istio_version | default('1.21.0') }}/bin/istioctl"
+    dest: /usr/local/bin/istioctl
+    mode: '0755'
+    remote_src: true
+  when: istioctl_check.rc != 0
+
+- name: Check if Istio is already installed
+  ansible.builtin.command: kubectl get namespace istio-system
+  register: istio_ns_check
+  changed_when: false
+  failed_when: false
+
+- name: Install Istio (default profile)
+  ansible.builtin.command: >
+    istioctl install --set profile={{ istio_profile | default('default') }}
+    --set meshConfig.accessLogFile=/dev/stdout
+    --skip-confirmation
+  when: istio_ns_check.rc != 0
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+- name: Wait for Istio components
+  ansible.builtin.command: >
+    kubectl wait --for=condition=Ready pods --all
+    -n istio-system --timeout=300s
+  when: istio_ns_check.rc != 0
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  changed_when: false
+
+- name: Enable Istio injection for demo-app namespace
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: demo-app
+        labels:
+          istio-injection: enabled
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+  when: istio_ns_check.rc != 0

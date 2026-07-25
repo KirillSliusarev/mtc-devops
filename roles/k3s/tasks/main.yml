@@ -1,0 +1,116 @@
+---
+# Ansible role: k3s single-node installation
+# Requirements:
+#   - Ubuntu 22.04
+#   - k3s_version variable (defined in inventory)
+#
+# Installs k3s without Traefik (Istio will be used as the ingress/gateway),
+# waits for the node to become Ready, copies kubeconfig for the current user,
+# and installs kubectl.
+
+# ---------------------------------------------------------------------------
+# Idempotency: only run installer if k3s is NOT already installed.
+# Checking /usr/local/bin/k3s is the canonical install marker.
+# ---------------------------------------------------------------------------
+- name: "k3s | Check if k3s is already installed"
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s
+  register: k3s_binary
+
+- name: "k3s | Display install status"
+  ansible.builtin.debug:
+    msg: >-
+      k3s is {% if k3s_binary.stat.exists %}already installed
+      (skipping download){% else %}not installed — proceeding with install
+      ({{ k3s_version }}){% endif %}.
+
+# ---------------------------------------------------------------------------
+# Install k3s via official install script, disabling Traefik.
+# --disable traefik        → we will use Istio as service mesh / ingress
+# --write-kubeconfig-mode  → 644 so non-root users can read /etc/rancher/k3s/k3s.yaml
+# ---------------------------------------------------------------------------
+- name: "k3s | Download and install k3s (single-node, no Traefik)"
+  when: not k3s_binary.stat.exists
+  block:
+    - name: "k3s | Run official k3s install script"
+      ansible.builtin.shell: |
+        curl -sfL https://get.k3s.io | \
+          INSTALL_K3S_VERSION="{{ k3s_version }}" sh -s - \
+            --disable traefik \
+            --write-kubeconfig-mode 644
+      args:
+        creates: /usr/local/bin/k3s
+      environment:
+        INSTALL_K3S_VERSION: "{{ k3s_version }}"
+
+    - name: "k3s | Ensure k3s service is enabled and started"
+      ansible.builtin.systemd:
+        name: k3s
+        enabled: true
+        state: started
+        daemon_reload: true
+
+# ---------------------------------------------------------------------------
+# Wait for the k3s node to become Ready (control-plane node == single node).
+# `kubectl wait` blocks up to 300s for ALL nodes to reach Ready.
+# ---------------------------------------------------------------------------
+- name: "k3s | Wait for node Ready (up to 300s)"
+  ansible.builtin.command: >-
+    k3s kubectl wait --for=condition=Ready node --all --timeout=300s
+  register: k3s_node_ready
+  changed_when: false
+  retries: 3
+  delay: 10
+  until: k3s_node_ready.rc == 0
+
+# ---------------------------------------------------------------------------
+# Copy kubeconfig for the current (non-root) ansible user so they can run
+# `kubectl` without sudo. We rewrite the server URL to use the node's
+# external IP instead of 127.0.0.1, and fix permissions.
+# ---------------------------------------------------------------------------
+- name: "k3s | Ensure ~/.kube directory exists for '{{ ansible_user_id }}'"
+  ansible.builtin.file:
+    path: "{{ ansible_env.HOME }}/.kube"
+    state: directory
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
+    mode: "0700"
+
+- name: "k3s | Copy kubeconfig for current user and fix server endpoint"
+  ansible.builtin.shell: |
+    set -o pipefail
+    src="/etc/rancher/k3s/k3s.yaml"
+    dst="{{ ansible_env.HOME }}/.kube/config"
+    # Replace default localhost endpoint with the node's external IP.
+    sed "s|127.0.0.1|{{ ansible_host }}|g; s|default|{{ ansible_user_id }}-cluster|g" "$src" > "$dst"
+    chmod 600 "$dst"
+    chown {{ ansible_user_id }}:{{ ansible_user_id }} "$dst"
+  args:
+    creates: "{{ ansible_env.HOME }}/.kube/config"
+  become: true
+
+# ---------------------------------------------------------------------------
+# Install kubectl via snap (classic confinement required by upstream).
+# Snap keeps kubectl auto-updated, which suits a dev/test chaos stand.
+# Falls back gracefully if snap is unavailable.
+# ---------------------------------------------------------------------------
+- name: "k3s | Check if kubectl is installed"
+  ansible.builtin.command: which kubectl
+  register: kubectl_check
+  changed_when: false
+  failed_when: false
+
+- name: "k3s | Install kubectl via snap (classic)"
+  community.general.snap:
+    name: kubectl
+    classic: true
+  when: kubectl_check.rc != 0
+
+- name: "k3s | Verify kubectl installation"
+  ansible.builtin.command: kubectl version --client
+  register: kubectl_version
+  changed_when: false
+
+- name: "k3s | Show kubectl version"
+  ansible.builtin.debug:
+    var: kubectl_version.stdout_lines

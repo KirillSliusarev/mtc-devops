@@ -1,0 +1,9 @@
+---
+# defaults/main.yml для роли docker
+
+# Пользователь, которого добавляем в группу docker
+docker_user: "{{ ansible_user | default('ubuntu') }}"
+
+# Log limits в daemon.json
+docker_log_max_size: "10m"
+docker_log_max_file: 3

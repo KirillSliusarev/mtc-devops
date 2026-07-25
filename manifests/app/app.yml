@@ -1,0 +1,184 @@
+---
+# Sample multi-tier application for Chaos Engineering demo
+# Frontend (nginx) → Backend (python/flask) → DB (postgres)
+# All in demo-app namespace with Istio injection enabled
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo-app
+  labels:
+    istio-injection: enabled
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: demo-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: nginx:1.25-alpine
+        ports:
+        - containerPort: 80
+        env:
+        - name: BACKEND_URL
+          value: "http://backend:5000"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        volumeMounts:
+        - name: config
+          mountPath: /usr/share/nginx/html
+      volumes:
+      - name: config
+        configMap:
+          name: frontend-html
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-html
+  namespace: demo-app
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html><body>
+    <h1>Frontend (nginx)</h1>
+    <p id="backend-status">Loading...</p>
+    <script>
+    fetch('http://backend.demo-app.svc.cluster.local:5000/api/status')
+      .then(r => r.json())
+      .then(d => { document.getElementById('backend-status').innerHTML =
+        'Backend: ' + JSON.stringify(d); })
+      .catch(e => { document.getElementById('backend-status').innerHTML =
+        'Backend ERROR: ' + e; });
+    </script>
+    </body></html>
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: demo-app
+spec:
+  selector:
+    app: frontend
+  ports:
+  - port: 80
+    targetPort: 80
+    name: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: demo-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+      - name: backend
+        image: python:3.11-slim
+        ports:
+        - containerPort: 5000
+        env:
+        - name: DB_HOST
+          value: "db"
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_NAME
+          value: "demo"
+        - name: DB_USER
+          value: "demo"
+        - name: DB_PASS
+          value: "demo123"
+        command: ["python3", "-m", "http.server", "5000"]
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 250m
+            memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: demo-app
+spec:
+  selector:
+    app: backend
+  ports:
+  - port: 5000
+    targetPort: 5000
+    name: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db
+  namespace: demo-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: db
+  template:
+    metadata:
+      labels:
+        app: db
+    spec:
+      containers:
+      - name: db
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_DB
+          value: "demo"
+        - name: POSTGRES_USER
+          value: "demo"
+        - name: POSTGRES_PASSWORD
+          value: "demo123"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 300m
+            memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db
+  namespace: demo-app
+spec:
+  selector:
+    app: db
+  ports:
+  - port: 5432
+    targetPort: 5432
+    name: tcp

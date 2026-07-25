@@ -1,0 +1,34 @@
+---
+# Site playbook — полный setup стенда одной командой
+# Usage: ansible-playbook -i inventory.yml site.yml
+#       (или с указанием хоста: -e target_host=10.0.0.5 -e target_user=myuser)
+
+- name: Install Docker
+  hosts: all
+  become: true
+  roles:
+    - docker
+
+- name: Install k3s (single-node Kubernetes)
+  hosts: all
+  become: true
+  roles:
+    - k3s
+
+- name: Install Istio service mesh
+  hosts: all
+  become: true
+  roles:
+    - istio
+
+- name: Deploy Harbor registry
+  hosts: all
+  become: true
+  roles:
+    - harbor
+
+- name: Deploy sample application
+  hosts: all
+  become: true
+  roles:
+    - app
