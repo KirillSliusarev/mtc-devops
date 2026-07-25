@@ -3,10 +3,6 @@ set -euo pipefail
 
 # =============================================================================
 # Сценарий 1: HTTP Latency — задержка ответа backend
-# Тип: Стандартный
-# =============================================================================
-# Вносит задержку 5 секунд на 50% запросов между frontend и backend.
-# Демонстрирует: как задержка одного компонента деградирует весь UX.
 # =============================================================================
 
 NAMESPACE="demo-app"
@@ -14,30 +10,22 @@ DELAY="5s"
 PERCENT="50"
 
 echo "╔══════════════════════════════════════════════════════════╗"
-echo "║  СЦЕНАРИЙ 1: HTTP Latency (backend)                      ║"
+echo "║  СЦЕНАРИЙ 1: HTTP Latency (frontend → backend)          ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
-echo "Конфигурация:"
-echo "  - Задержка: ${DELAY}"
-echo "  - Процент затронутых запросов: ${PERCENT}%"
+echo "ОТКРОЙ В БРАУЗЕРЕ:"
+echo "  📊 Приложение:  http://<VM-IP>:30080"
+echo "  📈 Grafana:     http://<VM-IP>:30000  → Chaos Engineering → Istio Service Dashboard"
 echo ""
-
-# --- ДО внедрения ошибки ---
-echo "▶ ФАЗА 1: Проверка ДО внедрения ошибки"
-echo "  Проверяем доступность backend..."
-if kubectl get svc -n "${NAMESPACE}" backend >/dev/null 2>&1; then
-    echo "  ✓ Backend Service существует"
-    kubectl exec -n "${NAMESPACE}" deployment/frontend -- \
-        curl -s -o /dev/null -w "  Время ответа: %{time_total}s\nHTTP код: %{http_code}\n" \
-        http://backend:5000/ || echo "  (ожидаемо — python http.server)"
-fi
+echo "Что должно быть видно сейчас:"
+echo "  - Страница обновляется каждые 2с"
+echo "  - DB: connected (зелёный)"
+echo "  - DB response: ~10ms"
 echo ""
-echo "  >>> Откройте приложение и проверьте что оно работает <<<"
-echo "  >>> Нажмите Enter чтобы продолжить <<<"
+echo ">>> Нажми Enter чтобы внедрить задержку <<<"
 read -r
 
-# --- Применение Istio fault injection ---
-echo "▶ ФАЗА 2: Внедрение задержки через Istio VirtualService..."
+echo "Внедрение задержки: ${DELAY} на ${PERCENT}% запросов..."
 cat <<EOF | kubectl apply -f -
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
@@ -59,32 +47,18 @@ spec:
         port:
           number: 5000
 EOF
-echo "  ✓ Istio VirtualService 'backend-latency' применён"
+echo "Готово! Задержка активна."
 echo ""
-
-# --- ПОСЛЕ внедрения ошибки ---
-echo "▶ ФАЗА 3: Проверка ПОСЛЕ внедрения ошибки"
-echo "  Проверяем задержку..."
-for i in 1 2 3 4 5; do
-    kubectl exec -n "${NAMESPACE}" deployment/frontend -- \
-        curl -s -o /dev/null -w "  Запрос ${i}: %{time_total}s (HTTP %{http_code})\n" \
-        http://backend:5000/ || true
-done
+echo "СМОТРИ В БРАУЗЕР:"
+echo "  📊 Приложение: страница обновляется РАЗ В 5+ СЕКУНД (вместо 2с)"
+echo "  📈 Grafana → Istio Service: красный spike p95 latency до 5s"
 echo ""
-echo "  >>> Откройте приложение — страница будет грузиться медленно <<<"
-echo "  >>> Нажмите Enter чтобы откатить <<<"
+echo ">>> Нажми Enter чтобы откатить <<<"
 read -r
 
-# --- Откат ---
-echo "▶ ФАЗА 4: Откат изменений"
 kubectl delete virtualservice backend-latency -n "${NAMESPACE}" --ignore-not-found
-echo "  ✓ VirtualService удалён, задержка снята"
+echo "Задержка снята."
 echo ""
-
-# --- Проверка после отката ---
-echo "▶ Проверка после отката:"
-kubectl exec -n "${NAMESPACE}" deployment/frontend -- \
-    curl -s -o /dev/null -w "  Время ответа: %{time_total}s\n" \
-    http://backend:5000/ || true
+echo "Проверь: приложение снова быстрое, latency в норме."
 echo ""
 echo "✓ Сценарий 1 завершён"

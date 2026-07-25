@@ -3,10 +3,6 @@ set -euo pipefail
 
 # =============================================================================
 # Сценарий 2: HTTP 500 — Harbor core возвращает ошибки
-# Тип: Стандартный
-# =============================================================================
-# 50% запросов к Harbor core возвращают HTTP 500.
-# Демонстрирует: как ошибки одного компонента Harbor ломают весь registry.
 # =============================================================================
 
 HARBOR_NS="harbor"
@@ -16,32 +12,18 @@ echo "╔═══════════════════════�
 echo "║  СЦЕНАРИЙ 2: HTTP 500 (Harbor core)                     ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
-echo "Конфигурация:"
-echo "  - HTTP 500 на ${PERCENT}% запросов к harbor-core"
-echo "  - Влияет: docker push/pull, API, аутентификация"
+echo "ОТКРОЙ В БРАУЗЕРЕ:"
+echo "  🐳 Harbor UI:   http://<VM-IP>:30002  (admin / Harbor12345)"
+echo "  📈 Grafana:     http://<VM-IP>:30000  → Istio Service Dashboard"
 echo ""
-
-# --- ДО ---
-echo "▶ ФАЗА 1: Проверка ДО внедрения ошибки"
-echo "  Проверяем Harbor core..."
-if kubectl get svc -n "${HARBOR_NS}" harbor-core >/dev/null 2>&1; then
-    echo "  ✓ Harbor core Service существует"
-    CORE_IP=$(kubectl get svc -n "${HARBOR_NS}" harbor-core -o jsonpath='{.spec.clusterIP}' 2>/dev/null || echo "")
-    if [ -n "${CORE_IP}" ]; then
-        kubectl exec -n "${HARBOR_NS}" deployment/harbor-core -- \
-            curl -s -o /dev/null -w "  Harbor core: HTTP %{http_code}, время: %{time_total}s\n" \
-            "http://localhost:80/api/v2.0/health" || true
-    fi
-else
-    echo "  ⚠ Harbor не найден. Убедитесь что role harbor выполнена."
-fi
+echo "Что должно быть видно сейчас:"
+echo "  - Harbor UI открывается нормально"
+echo "  - Можешь залогиниться (admin / Harbor12345)"
 echo ""
-echo "  >>> Проверьте Harbor UI (docker login, docker pull) <<<"
-echo "  >>> Нажмите Enter чтобы продолжить <<<"
+echo ">>> Нажми Enter чтобы внедрить HTTP 500 <<<"
 read -r
 
-# --- Применение ---
-echo "▶ ФАЗА 2: Внедрение HTTP 500 через Istio..."
+echo "Внедрение HTTP 500: ${PERCENT}% запросов к harbor-core..."
 cat <<EOF | kubectl apply -f -
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
@@ -63,25 +45,18 @@ spec:
         port:
           number: 80
 EOF
-echo "  ✓ Istio VirtualService 'harbor-core-500' применён"
+echo "Готово! HTTP 500 активен."
 echo ""
-
-# --- ПОСЛЕ ---
-echo "▶ ФАЗА 3: Проверка ПОСЛЕ внедрения ошибки"
-for i in 1 2 3 4 5; do
-    kubectl exec -n "${HARBOR_NS}" deployment/harbor-core -- \
-        curl -s -o /dev/null -w "  Запрос ${i}: HTTP %{http_code}\n" \
-        "http://localhost:80/api/v2.0/health" 2>/dev/null || \
-        echo "  Запрос ${i}: соединение разорвано (ISTIO 500 injected)"
-done
+echo "СМОТРИ В БРАУЗЕР:"
+echo "  🐳 Harbor UI: обнови страницу (F5) несколько раз — половина запросов упадёт с 500"
+echo "  📈 Grafana → Istio Service: рост error rate"
 echo ""
-echo "  >>> Попробуйте docker login/pull — половина операций упадёт <<<"
-echo "  >>> Нажмите Enter чтобы откатить <<<"
+echo ">>> Нажми Enter чтобы откатить <<<"
 read -r
 
-# --- Откат ---
-echo "▶ ФАЗА 4: Откат изменений"
 kubectl delete virtualservice harbor-core-500 -n "${HARBOR_NS}" --ignore-not-found
-echo "  ✓ VirtualService удалён"
+echo "HTTP 500 снят."
+echo ""
+echo "Проверь: Harbor снова работает."
 echo ""
 echo "✓ Сценарий 2 завершён"

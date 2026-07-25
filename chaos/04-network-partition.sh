@@ -3,7 +3,7 @@ set -euo pipefail
 
 # =============================================================================
 # Сценарий 4: Network Partition — полный обрыв backend ↔ DB
-# Кастомный. AuthorizationPolicy DENY всех подключений к DB.
+# Кастомный.
 # =============================================================================
 
 NAMESPACE="demo-app"
@@ -13,18 +13,18 @@ echo "║  СЦЕНАРИЙ 4: Network Partition (backend ↔ DB)           ║"
 echo "║  [КАСТОМНЫЙ]                                            ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
-
-# --- ДО ---
-echo "▶ ФАЗА 1: DB работает — backend пишет в БД"
-kubectl exec -n "${NAMESPACE}" deployment/frontend -- \
-    curl -s http://backend:5000/api/status 2>&1
+echo "ОТКРОЙ В БРАУЗЕРЕ:"
+echo "  📊 Приложение:  http://<VM-IP>:30080"
+echo "  📈 Grafana:     http://<VM-IP>:30000  → Istio Workload Dashboard"
 echo ""
-
-echo "  >>> Нажмите Enter для обрыва связи <<<"
+echo "Что должно быть видно сейчас:"
+echo "  - DB: connected (зелёный)"
+echo "  - Backend пишет в БД (Insert ID растёт)"
+echo ""
+echo ">>> Нажми Enter чтобы ОБОРВАТЬ связь с DB <<<"
 read -r
 
-# --- DENY ALL трафика к DB ---
-echo "▶ ФАЗА 2: Обрыв связи (DENY all → DB)"
+echo "Обрыв связи: DENY ALL трафика к DB..."
 cat <<EOF | kubectl apply -f -
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
@@ -40,31 +40,19 @@ spec:
   - {}
 EOF
 sleep 3
-echo "  ✓ AuthorizationPolicy DENY ALL применён"
+echo "Готово! Связь с DB полностью разорвана."
 echo ""
-
-# --- ПОСЛЕ ---
-echo "▶ ФАЗА 3: Backend не может подключиться к DB"
-for i in 1 2 3; do
-    echo "  Попытка $i:"
-    kubectl exec -n "${NAMESPACE}" deployment/frontend -- \
-        curl -s http://backend:5000/api/status 2>&1 | head -3
-    sleep 1
-done
+echo "СМОТРИ В БРАУЗЕР:"
+echo "  📊 Приложение: DB: error (красный) — backend не может записать в БД"
+echo "  📈 Grafana → Istio Workload: трафик к db = 0, ошибки 100%"
 echo ""
-echo "  >>> Backend отдаёт 503 — DB недоступна <<<"
-echo "  >>> Нажмите Enter для восстановления <<<"
+echo ">>> Нажми Enter чтобы восстановить связь <<<"
 read -r
 
-# --- Откат ---
-echo "▶ ФАЗА 4: Восстановление"
 kubectl delete authorizationpolicy deny-all-to-db -n "${NAMESPACE}" --ignore-not-found
 sleep 5
-echo "  ✓ Связь восстановлена"
+echo "Связь восстановлена."
 echo ""
-
-# Проверка
-kubectl exec -n "${NAMESPACE}" deployment/frontend -- \
-    curl -s http://backend:5000/api/status 2>&1
+echo "Проверь: DB снова connected (зелёный)."
 echo ""
 echo "✓ Сценарий 4 завершён"

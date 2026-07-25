@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-html
+  namespace: demo-app
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html><head><meta charset="utf-8"><title>Chaos Demo</title></head>
+    <body>
+    <h1>🔴 Chaos Demo App</h1>
+    <h2>Backend Status</h2>
+    <pre id="status" style="font-size:16px; background:#f0f0f0; padding:15px; border-radius:5px;">Loading...</pre>
+    <p>Auto-refresh every 2 seconds</p>
+    <script>
+    async function check() {
+      try {
+        const r = await fetch('/api/status');
+        const d = await r.json();
+        const color = d.db === 'connected' ? '#2e7d32' : '#c62828';
+        document.getElementById('status').innerHTML =
+          'HTTP: ' + r.status + '\n' +
+          'DB: <span style="color:'+color+'"><b>' + d.db + '</b></span>\n' +
+          'DB response: ' + d.db_response_ms + ' ms\n' +
+          'Insert ID: ' + (d.last_insert_id || 'N/A');
+      } catch(e) {
+        document.getElementById('status').innerHTML = '❌ ERROR: ' + e;
+      }
+    }
+    check();
+    setInterval(check, 2000);
+    </script>
+    </body></html>
+  default.conf: |
+    server {
+        listen 80;
+        
+        location / {
+            root /usr/share/nginx/html;
+            index index.html;
+        }
+        
+        location /api/ {
+            proxy_pass http://backend:5000/api/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_connect_timeout 2s;
+            proxy_read_timeout 10s;
+        }
+    }

@@ -2,42 +2,43 @@
 set -euo pipefail
 
 # =============================================================================
-# Запуск всех chaos-сценариев последовательно
+# Chaos Engineering Demo — запуск всех сценариев
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "╔══════════════════════════════════════════════════════════╗"
-echo "║  CHAOS ENGINEERING DEMO — все сценарии                  ║"
+echo "║  CHAOS ENGINEERING DEMO                                 ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
+echo "ОБЯЗАТЕЛЬНО ОТКРОЙ В БРАУЗЕРЕ перед стартом:"
+echo "  📊 Приложение:  http://<VM-IP>:30080"
+echo "  🐳 Harbor UI:   http://<VM-IP>:30002  (admin / Harbor12345)"
+echo "  📈 Grafana:     http://<VM-IP>:30000  (admin / admin)"
+echo "      → Chaos Engineering → Istio Service / Workload Dashboard"
+echo ""
 echo "Сценарии:"
-echo "  1. HTTP Latency — задержка backend (стандартный)"
-echo "  2. HTTP 500 — Harbor core ошибки (стандартный)"
-echo "  3. DB Latency — задержка БД (стандартный)"
+echo "  1. HTTP Latency — 5s задержка frontend→backend"
+echo "  2. HTTP 500 — Harbor core ошибки 50%"
+echo "  3. DB Latency — 3s задержка backend→DB"
 echo "  4. Network Partition — обрыв backend↔DB (кастомный)"
 echo ""
 echo "Каждый сценарий:"
-echo "  1. Демонстрация работы приложения"
-echo "  2. Пауза для ручной проверки"
-echo "  3. Внедрение ошибки"
-echo "  4. Демонстрация деградации"
-echo "  5. Пауза"
-echo "  6. Откат изменений"
+echo "  1) Демонстрация работы приложения (смотри браузер)"
+echo "  2) Пауза → внедрение ошибки → пауза (смотри деградацию)"
+echo "  3) Откат → проверка восстановления"
 echo ""
 
-# Проверка зависимостей
 if ! command -v kubectl &>/dev/null; then
-    echo "✗ kubectl не найден. Установите k3s/kubectl сначала."
+    echo "✗ kubectl не найден. Запусти site.yml сначала."
     exit 1
 fi
 
 if ! kubectl get nodes >/dev/null 2>&1; then
-    echo "✗ Kubernetes кластер недоступен. Запустите site.yml сначала."
+    echo "✗ Kubernetes недоступен. Запусти site.yml сначала."
     exit 1
 fi
 
-# Запуск сценариев
 for script in \
     "${SCRIPT_DIR}/01-http-latency.sh" \
     "${SCRIPT_DIR}/02-http-500.sh" \
@@ -52,11 +53,9 @@ for script in \
         
         if [ "${script}" != "${SCRIPT_DIR}/04-network-partition.sh" ]; then
             echo ""
-            echo "Нажмите Enter для следующего сценария..."
+            echo "Нажми Enter для следующего сценария..."
             read -r
         fi
-    else
-        echo "⚠ Скрипт не найден: ${script}"
     fi
 done
 
@@ -65,4 +64,4 @@ echo "╔═══════════════════════�
 echo "║  ВСЕ СЦЕНАРИИ ЗАВЕРШЕНЫ                                 ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
-echo "Все fault injection откачены. Кластер в нормальном состоянии."
+echo "Все ошибки откачены. Проверь в браузере — всё работает."
