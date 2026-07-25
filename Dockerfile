@@ -1,16 +1,25 @@
-# Docker-wrapped Ansible playbook (бонус)
-# Позволяет запустить весь стенд из Docker контейнера без установки Ansible локально
+# MTC DevOps — Docker Runner
+# Собирает контейнер с Ansible, подключается к ВМ по SSH и разворачивает стенд.
 #
-# Build:  docker build -t mtc-chaos-runner .
-# Run:    docker run --rm -e TARGET_HOST=192.168.1.100 -e TARGET_USER=ubuntu mtc-chaos-runner
+# Build:
+#   docker build -t mtc-chaos .
 #
-# Требуется SSH ключ для доступа к ВМ. Передайте через volume mount:
-#   docker run --rm -v ~/.ssh:/root/.ssh:ro -e TARGET_HOST=... -e TARGET_USER=... mtc-chaos-runner
+# Run:
+#   docker run --rm \
+#     -e TARGET_HOST=192.168.0.40 \
+#     -e TARGET_PORT=22 \
+#     -e TARGET_USER=ubuntu \
+#     -e TARGET_PASSWORD=my_password \
+#     mtc-chaos
+#
+# Если используется SSH ключ вместо пароля:
+#   docker run --rm \
+#     -v ~/.ssh:/root/.ssh:ro \
+#     -e TARGET_HOST=192.168.0.40 \
+#     -e TARGET_USER=ubuntu \
+#     mtc-chaos
 
 FROM ubuntu:22.04
-
-ARG ANSIBLE_VERSION=8.5.0
-ARG KUBECTL_VERSION=v1.29.3
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV ANSIBLE_HOST_KEY_CHECKING=False
@@ -23,22 +32,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     sshpass \
     curl \
     && pip3 install --no-cache-dir \
-    ansible==${ANSIBLE_VERSION} \
-    kubernetes \
+    "ansible-core>=2.15" \
     PyYAML \
-    && curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
-       -o /usr/local/bin/kubectl \
-    && chmod +x /usr/local/bin/kubectl \
+    && ansible-galaxy collection install community.general ansible.posix \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /ansible
 
 COPY . /ansible/
 
-RUN echo "[defaults]\n\
-host_key_checking = False\n\
-retry_files_enabled = False\n\
-stdout_callback = yaml\n" > /etc/ansible/ansible.cfg
+RUN mkdir -p /etc/ansible && \
+    printf '[defaults]\nhost_key_checking = False\nretry_files_enabled = False\n' \
+    > /etc/ansible/ansible.cfg
 
-ENTRYPOINT ["ansible-playbook", "-i", "inventory.yml", "site.yml", "-e"]
-CMD ["target_host=192.168.1.100", "target_user=ubuntu"]
+# Entrypoint: генерируем inventory из env vars, запускаем playbook
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]

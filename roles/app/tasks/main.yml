@@ -1,11 +1,27 @@
 ---
 # Sample application deployment role
-# Uses kubectl apply directly (no Python kubernetes dependency)
+# Copy manifests to target VM, then apply
 
-- name: Deploy application manifests
-  ansible.builtin.shell: |
-    kubectl apply -f {{ role_path }}/../../manifests/app/app.yml
-    kubectl apply -f {{ role_path }}/../../manifests/app/gateway.yml
+- name: Copy app manifest to target
+  ansible.builtin.copy:
+    src: /ansible/manifests/app/app.yml
+    dest: /tmp/app.yml
+    mode: "0644"
+
+- name: Copy gateway manifest to target
+  ansible.builtin.copy:
+    src: /ansible/manifests/app/gateway.yml
+    dest: /tmp/gateway.yml
+    mode: "0644"
+
+- name: Apply app manifest
+  ansible.builtin.command: kubectl apply -f /tmp/app.yml
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  changed_when: false
+
+- name: Apply Istio gateway
+  ansible.builtin.command: kubectl apply -f /tmp/gateway.yml
   environment:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
   changed_when: false
@@ -22,6 +38,5 @@
   ansible.builtin.debug:
     msg:
       - "Application deployed!"
-      - "Frontend (via Istio Ingress): http://{{ ansible_host }}:30080 (if NodePort configured)"
       - "Harbor UI: http://{{ ansible_host }}:30002"
-      - "Check pods: kubectl get pods -n demo-app"
+      - "Istio Ingress: http://{{ ansible_host }}:30133"

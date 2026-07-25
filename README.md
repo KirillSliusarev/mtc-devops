@@ -3,88 +3,83 @@
 Chaos Engineering стенд: k3s + Istio + Harbor + многокомпонентное приложение
 с автоматизированной инъекцией отказов через Istio fault injection.
 
-## Быстрый старт
+## Запуск
 
 ```bash
-# Требования: Ubuntu 22.04 amd64, 8+ GB RAM, SSH-доступ с sudo
+# 1. Клонировать
+git clone git@github.com:KirillSliusarev/mtc-devops.git
+cd mtc-devops
 
-# 1. Клонировать репозиторий
-git clone <repo-url> && cd mtc-devops
+# 2. Собрать runner
+docker build -t mtc-chaos .
 
-# 2. Запустить полный setup одной командой
-ansible-playbook -i inventory.yml site.yml
+# 3. Запустить (указать IP, порт и пользователя ВМ)
+docker run --rm \
+  -v ~/.ssh:/root/.ssh:ro \
+  -e TARGET_HOST=192.168.0.40 \
+  -e TARGET_PORT=2222 \
+  -e TARGET_USER=kirill \
+  -e TARGET_PASSWORD=somepassword \
+  mtc-chaos
 
-# 3. Запустить chaos-демонстрацию
+# 4. Запустить chaos-демонстрацию (на ВМ или через SSH)
+ssh kirill@192.168.0.40 -p 2222
+cd /tmp/mtc-devops
 ./chaos/run-all.sh
 ```
 
-## Что входит
+## Что происходит при запуске
 
-| Компонент | Описание |
+Docker-контейнер с Ansible подключается к ВМ по SSH и за ~5 минут разворачивает:
+
+| Компонент | Назначение |
 |---|---|
-| **k3s** | Однонодовый Kubernetes |
-| **Istio** | Service mesh для fault injection |
-| **Harbor** | Приватный registry (core, portal, registry — по 1 реплике) |
-| **Sample app** | Frontend (nginx) + Backend (python/flask) + DB (postgres) |
-| **Ansible** | Автоматизация установки всех компонентов |
-| **Chaos-скрипты** | 4 сценария отказа с автоматическим откатом |
+| Docker | Контейнерная среда |
+| k3s | Однонодовый Kubernetes (без Traefik) |
+| Istio | Service mesh для fault injection |
+| Harbor | Приватный registry (1 реплика на компонент) |
+| Frontend + Backend + DB | Трёхзвенное приложение для демонстрации отказов |
 
-## Сценарии Chaos Engineering
+## Chaos-сценарии
 
-| # | Сценарий | Тип | Описание |
+| # | Сценарий | Тип | Что делает |
 |---|---|---|---|
-| 1 | HTTP Latency | Стандартный | Задержка 5s на 50% запросов backend↔frontend |
+| 1 | HTTP Latency | Стандартный | Задержка 5s на 50% запросов frontend→backend |
 | 2 | HTTP 500 | Стандартный | 50% запросов к Harbor core возвращают 500 |
-| 3 | DB Latency | Стандартный | Задержка 3s между приложением и PostgreSQL |
-| 4 | Network Partition | Кастомный | Полный обрыв связи между backend и DB |
+| 3 | DB Latency | Стандартный | Задержка 3s между backend и PostgreSQL |
+| 4 | Network Partition | Кастомный | Полный обрыв связи backend↔DB |
 
 Каждый сценарий: демонстрация до → внедрение ошибки → демонстрация после → откат.
+
+## Доступы после развёртывания
+
+- **Harbor UI:** `http://<VM-IP>:30002` (admin / Harbor12345)
+- **Istio Ingress Gateway:** `http://<VM-IP>:30133`
+
+## Требования к ВМ
+
+- Ubuntu 22.04 amd64
+- 8+ GB RAM
+- 4+ vCPU
+- 20 GB свободного места
+- SSH-доступ с пользователем в группе sudoers
 
 ## Структура
 
 ```
 mtc-devops/
-├── site.yml                  # Главный playbook (одна команда — весь стенд)
-├── inventory.yml             # Инвентарь (localhost по умолчанию)
+├── Dockerfile                # Docker runner с Ansible внутри
+├── site.yml                  # Главный playbook
+├── inventory.yml             # Инвентарь (переменные окружения)
 ├── roles/
-│   ├── docker/               # Установка Docker
-│   ├── k3s/                  # Установка k3s
-│   ├── istio/                # Установка Istio + включение injection
-│   ├── harbor/               # Установка Harbor (1 реплика)
-│   └── app/                  # Деплой sample app
-├── manifests/
-│   ├── app/                  # K8s манифесты приложения
-│   ├── harbor/               # Harbor Helm values
-│   └── istio-base/           # Базовые Istio ресурсы (Gateway, DestinationRule)
-├── chaos/                    # Bash-скрипты chaos-сценариев
-│   ├── 01-http-latency.sh
-│   ├── 02-http-500.sh
-│   ├── 03-db-latency.sh
-│   ├── 04-network-partition.sh
-│   └── run-all.sh
-├── docs/
-│   ├── CHAOS_RESEARCH.md     # Анализ сценариев отказа
-│   └── architecture.md       # Описание архитектуры
-└── README.md
+│   ├── docker/               # Установка Docker CE
+│   ├── k3s/                  # k3s + kubectl + Helm 3
+│   ├── istio/                # Istio + sidecar injection
+│   ├── harbor/               # Harbor (минимальные ресурсы)
+│   └── app/                  # Деплой frontend+backend+DB+gateway
+├── manifests/app/            # K8s манифесты приложения
+├── chaos/                    # Bash-скрипты (4 сценария + run-all)
+└── docs/
+    ├── CHAOS_RESEARCH.md     # Анализ сценариев отказа (271 строка)
+    └── architecture.md       # Описание архитектуры
 ```
-
-## Демонстрация
-
-После `site.yml` откройте:
-
-- **Harbor UI:** `http://<VM-IP>:30002` (admin/Harbor12345)
-- **Приложение:** `http://<VM-IP>:30080`
-
-Chaos-скрипты запускаются интерактивно с паузами для проверки:
-
-```bash
-./chaos/01-http-latency.sh
-```
-
-## Требования к ВМ
-
-- Ubuntu 22.04 amd64
-- 8+ GB RAM (рекомендуется 8-16 GB)
-- 4+ vCPU
-- 40 GB свободного места
-- SSH-доступ с пользователем в группе sudoers
