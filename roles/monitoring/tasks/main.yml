@@ -58,20 +58,21 @@
           limits:
             cpu: 200m
             memory: 256Mi
+        # Grafana auto-provisions Prometheus datasource from helm
         dashboardProviders:
           dashboardproviders.yaml:
             apiVersion: 1
             providers:
-            - name: 'chaos'
+            - name: 'default'
               orgId: 1
               folder: 'Chaos Engineering'
               type: file
               disableDeletion: false
               editable: true
               options:
-                path: /var/lib/grafana/dashboards/chaos
+                path: /var/lib/grafana/dashboards/default
         dashboards:
-          chaos:
+          default:
             istio-mesh:
               gnetId: 7639
               revision: 22
@@ -83,6 +84,10 @@
             istio-workload:
               gnetId: 7630
               revision: 22
+              datasource: Prometheus
+            kubernetes-pods:
+              gnetId: 11100
+              revision: 1
               datasource: Prometheus
       
       # Disable heavy components
