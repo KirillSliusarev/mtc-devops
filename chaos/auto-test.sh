@@ -77,8 +77,8 @@ echo "╚═══════════════════════�
 
 phase "BASELINE (normal)" 30
 
-echo "  >>> INJECTING 5s backend delay (DB_DELAY_MS=5000) <<<"
-kubectl set env deployment/backend -n "${NAMESPACE}" DB_DELAY_MS=5000
+echo "  >>> INJECTING 3s backend delay (DB_DELAY_MS=3000) <<<"
+kubectl set env deployment/backend -n "${NAMESPACE}" DB_DELAY_MS=3000
 kubectl rollout status deployment/backend -n "${NAMESPACE}" --timeout=60s 2>/dev/null
 sleep 5
 
