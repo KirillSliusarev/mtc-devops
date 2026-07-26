@@ -68,22 +68,22 @@ data:
         },
         {
           "id": 3,
-          "title": "Harbor Core Health",
-          "description": "Drops to 0 during Scenario 2 (Harbor core down)",
+          "title": "Harbor Request Rate & Errors (req/s)",
+          "description": "Errors spike during Scenario 2 (HTTP 500 abort injection)",
           "type": "timeseries",
           "gridPos": {"h": 9, "w": 12, "x": 0, "y": 9},
           "datasource": {"type": "prometheus", "uid": "Prometheus"},
-          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+          "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
           "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
           "targets": [
             {
-              "expr": "kube_deployment_status_replicas{deployment=\"harbor-core\"}",
-              "legendFormat": "harbor-core replicas",
+              "expr": "sum(rate(istio_requests_total{destination_workload=~\"harbor-nginx|harbor-core|harbor-portal\"}[30s]))",
+              "legendFormat": "Total Harbor requests",
               "refId": "A"
             },
             {
-              "expr": "up{job=\"monitoring/istio-ingressgateway\"}",
-              "legendFormat": "ingress-gateway up",
+              "expr": "sum(rate(istio_requests_total{destination_workload=~\"harbor-nginx|harbor-core|harbor-portal\",response_code=~\"5..\"}[30s]))",
+              "legendFormat": "5xx errors",
               "refId": "B"
             }
           ]
