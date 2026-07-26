@@ -1,48 +1,41 @@
 #!/usr/bin/env bash
-# NO set -e: interactive scripts with read must not abort on non-zero
-
-# =============================================================================
-# Сценарий 3: DB Latency — задержка DB-запросов
-# Применяется через env DB_DELAY_MS на backend deployment.
-# Backend искусственно задерживает каждый DB-запрос на DB_DELAY_MS миллисекунд.
-# В реальном мире это симулирует медленную БД (disk I/O, lock contention).
-# =============================================================================
+# Сценарий 3: DB Latency — задержка DB-запросов.
+# Backend получает env DB_DELAY_MS=2000 и спит 2с перед каждым DB-запросом.
+# Симулирует медленную БД (disk I/O bottleneck, lock contention).
+# На Grafana (Panel "Backend P95 Response Time") виден spike P95 до ~2000ms.
+# Отличается от сценария 1 амплитудой задержки (2с vs 3с).
 
 NAMESPACE="demo-app"
 DELAY_MS="2000"
 
-echo "╔══════════════════════════════════════════════════════════╗"
-echo "║  Сценарий 3: DB Latency (backend → PostgreSQL)          ║"
-echo "╚══════════════════════════════════════════════════════════╝"
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+echo "=== Сценарий 3: DB Latency (backend -> PostgreSQL, ${DELAY_MS}ms) ==="
 echo ""
-echo "ОТКРОЙ В БРАУЗЕРЕ:"
-echo "  📊 Приложение:  http://<VM-IP>:30133"
-echo "  📈 Grafana:     http://<VM-IP>:30000 → Chaos Engineering Demo"
+echo "Откройте в браузере:"
+echo "  Приложение: http://$(hostname -I | awk '{print $1}'):30133"
+echo "  Grafana:    http://$(hostname -I | awk '{print $1}'):30000  (Panel: Backend P95 Response Time)"
 echo ""
-echo "Что видно сейчас:"
-echo "  - DB: connected (зелёный)"
-echo "  - DB response: ~10-20ms"
+echo "Текущее состояние:"
+echo "  DB-запрос выполняется за ~15ms (см. db_response_ms на странице приложения)"
 echo ""
-echo ">>> Нажми Enter чтобы внедрить задержку <<<"
+echo "Нажмите Enter для внедрения задержки..."
 read -r
 
-echo "Внедрение задержки ${DELAY_MS}ms на каждый DB-запрос..."
+echo "Установка DB_DELAY_MS=${DELAY_MS} на backend..."
 kubectl set env deployment/backend -n "${NAMESPACE}" DB_DELAY_MS="${DELAY_MS}"
-echo "Ждём рестарта backend..."
-kubectl rollout status deployment/backend -n "${NAMESPACE}" --timeout=60s
+kubectl rollout status deployment/backend -n "${NAMESPACE}" --timeout=60s 2>/dev/null
+sleep 3
 
-echo "Готово! Задержка ${DELAY_MS}ms активна."
 echo ""
-echo "СМОТРИ В БРАУЗЕР:"
-echo "  📊 Приложение: DB response вырастет до ~${DELAY_MS}ms"
-echo "  📈 Grafana → Chaos Engineering Demo: P95 Response Time spike"
+echo "Задержка активна. db_response_ms должен вырасти до ~${DELAY_MS}ms."
 echo ""
-echo ">>> Нажми Enter чтобы откатить <<<"
+echo "Нажмите Enter для отката..."
 read -r
 
 kubectl set env deployment/backend -n "${NAMESPACE}" DB_DELAY_MS="0"
-kubectl rollout status deployment/backend -n "${NAMESPACE}" --timeout=60s
+kubectl rollout status deployment/backend -n "${NAMESPACE}" --timeout=60s 2>/dev/null
 sleep 3
-echo "Задержка снята."
+echo "Задержка снята. db_response_ms должен вернуться к ~15ms."
 echo ""
-echo "✓ Сценарий 3 завершён"
+echo "Сценарий 3 завершён."

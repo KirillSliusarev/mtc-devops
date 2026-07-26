@@ -1,86 +1,123 @@
 # MTC True Tech — DevOps Test Task
 
-Chaos Engineering стенд: k3s + Istio + Harbor + многокомпонентное приложение
-с автоматизированной инъекцией отказов через Istio fault injection.
+Chaos Engineering стенд: разворачивает k3s + Istio + Harbor + demo-приложение
++ мониторинг через Ansible в Docker-контейнере. Включает 4 chaos-сценария.
+
+## Архитектура
+
+| Компонент | Описание |
+|---|---|
+| Docker | Контейнерная среда на ВМ |
+| k3s | Однонодовый Kubernetes (`v1.29.3+k3s1`), без Traefik |
+| Istio | Service mesh (`1.21.0`, профиль `default`), strict mTLS в namespace `demo-app` |
+| Harbor | Приватный registry, 1 реплика на компонент (namespace `harbor`) |
+| demo-app | Frontend (nginx) → Backend (python + psycopg2) → DB (postgres), namespace `demo-app`, istio-injection enabled |
+| Monitoring | kube-prometheus-stack: Prometheus + Grafana, namespace `monitoring` |
+
+Istio Ingress Gateway маршрутизирует трафик: `/api/` и `/health` → backend, остальное → frontend.
 
 ## Запуск
 
-```bash
-# 1. Клонировать
-git clone git@github.com:KirillSliusarev/mtc-devops.git
-cd mtc-devops
+Единственный путь запуска — через Docker. Контейнер содержит Ansible,
+подключается к ВМ по SSH и разворачивает весь стенд.
 
-# 2. Собрать runner
+```bash
 docker build -t mtc-chaos .
 
-# 3. Запустить (указать IP, порт и пользователя ВМ)
 docker run --rm \
-  -v ~/.ssh:/root/.ssh:ro \
-  -e TARGET_HOST=192.168.0.40 \
-  -e TARGET_PORT=2222 \
-  -e TARGET_USER=kirill \
-  -e TARGET_PASSWORD=somepassword \
+  -e TARGET_HOST=<IP> \
+  -e TARGET_PORT=<port> \
+  -e TARGET_USER=<user> \
+  -e TARGET_PASSWORD=<pass> \
   mtc-chaos
+```
 
-# 4. Запустить chaos-демонстрацию (на ВМ или через SSH)
-ssh kirill@192.168.0.40 -p 2222
+`TARGET_PORT` по умолчанию `22`, `TARGET_USER` — `ubuntu`.
+`TARGET_PASSWORD` опционален — если не задан, используется SSH-ключ из
+`~/.ssh` (примонтируйте `-v ~/.ssh:/root/.ssh:ro`).
+
+После завершения Ansible копирует chaos-скрипты на ВМ в `/tmp/mtc-devops/`.
+
+## Запуск chaos-сценариев
+
+Сценарии запускаются на ВМ (через SSH), не из Docker-контейнера.
+
+```bash
+ssh <user>@<IP> -p <port>
 cd /tmp/mtc-devops
 ./chaos/run-all.sh
 ```
 
-## Что происходит при запуске
+`run-all.sh` последовательно выполняет сценарии 01–04, каждый с паузой для
+демонстрации нормальной работы, внедрения ошибки и отката.
 
-Docker-контейнер с Ansible подключается к ВМ по SSH и за ~5 минут разворачивает:
+Для автоматического (неинтерактивного) прогона с генерацией фонового трафика:
+`./chaos/auto-test.sh` (3 минуты на сценарий + baseline/recovery).
 
-| Компонент | Назначение |
-|---|---|
-| Docker | Контейнерная среда |
-| k3s | Однонодовый Kubernetes (без Traefik) |
-| Istio | Service mesh для fault injection |
-| Harbor | Приватный registry (1 реплика на компонент) |
-| Frontend + Backend + DB | Трёхзвенное приложение для демонстрации отказов |
+## URL после развёртывания
+
+| Сервис | URL | Доступ |
+|---|---|---|
+| Приложение | `http://VM-IP:30133` | — |
+| Grafana | `http://VM-IP:30000` | `admin` / `admin` |
+| Harbor UI | `http://VM-IP:30002` | `admin` / `Harbor12345` |
+
+В Grafana: дашборд «Chaos Engineering Demo» (раскладка через ConfigMap).
 
 ## Chaos-сценарии
 
-| # | Сценарий | Тип | Что делает |
+| # | Сценарий | Инъекция | Эффект |
 |---|---|---|---|
-| 1 | HTTP Latency | Стандартный | Задержка 5s на 50% запросов frontend→backend |
-| 2 | HTTP 500 | Стандартный | 50% запросов к Harbor core возвращают 500 |
-| 3 | DB Latency | Стандартный | Задержка 3s между backend и PostgreSQL |
-| 4 | Network Partition | Кастомный | Полный обрыв связи backend↔DB |
+| 1 | HTTP Latency | `DB_DELAY_MS=3000` на deployment `backend` | Backend задерживает ответ на 3 с, P95 latency растёт |
+| 2 | Harbor core down | `kubectl scale deployment harbor-core --replicas=0` (namespace `harbor`) | Harbor API возвращает ошибку 5xx, UI недоступен |
+| 3 | DB Latency | `DB_DELAY_MS=2000` на deployment `backend` | Задержка DB-запросов 2 с, P95 latency растёт |
+| 4 | Network Partition | `AuthorizationPolicy DENY` (TCP порт 5432, от backend к db) | Backend не может записать в БД, DB status → error |
+
+Сценарии 1 и 3 отличаются амплитудой задержки (3000 мс против 2000 мс).
+Сценарий 4 — кастомный, использует Istio AuthorizationPolicy вместо env-инъекции.
 
 Каждый сценарий: демонстрация до → внедрение ошибки → демонстрация после → откат.
 
-## Доступы после развёртывания
-
-- **Приложение:** `http://<VM-IP>:30133` — главная страница с live DB status
-- **Grafana:** `http://<VM-IP>:30000` (admin / admin) — дашборды Istio Mesh, Service, Workload
-- **Harbor UI:** `http://<VM-IP>:30002` (admin / Harbor12345)
-
 ## Требования к ВМ
 
-- Ubuntu 22.04 amd64
-- 8+ GB RAM
+- Ubuntu 22.04 (amd64)
+- 8+ ГБ RAM
 - 4+ vCPU
-- 20 GB свободного места
-- SSH-доступ с пользователем в группе sudoers
+- 20 ГБ свободного места
+- SSH-доступ с пользователем в группе sudo (passwordless sudo или пароль для `TARGET_PASSWORD`)
 
-## Структура
+## Структура репозитория
 
 ```
 mtc-devops/
-├── Dockerfile                # Docker runner с Ansible внутри
-├── site.yml                  # Главный playbook
-├── inventory.yml             # Инвентарь (переменные окружения)
-├── roles/
-│   ├── docker/               # Установка Docker CE
-│   ├── k3s/                  # k3s + kubectl + Helm 3
-│   ├── istio/                # Istio + sidecar injection
-│   ├── harbor/               # Harbor (минимальные ресурсы)
-│   └── app/                  # Деплой frontend+backend+DB+gateway
-├── manifests/app/            # K8s манифесты приложения
-├── chaos/                    # Bash-скрипты (4 сценария + run-all)
-└── docs/
-    ├── CHAOS_RESEARCH.md     # Анализ сценариев отказа (271 строка)
-    └── architecture.md       # Описание архитектуры
+├── .dockerignore
+├── CHAOS_RESEARCH.md
+├── Dockerfile
+├── README.md
+├── entrypoint.sh
+├── inventory.yml
+├── site.yml
+├── chaos/
+│   ├── 01-http-latency.sh
+│   ├── 02-http-500.sh
+│   ├── 03-db-latency.sh
+│   ├── 04-network-partition.sh
+│   ├── auto-test.sh
+│   └── run-all.sh
+├── manifests/
+│   ├── app/
+│   │   ├── app.yml
+│   │   └── gateway.yml
+│   └── monitoring/
+│       ├── chaos-dashboard.yml
+│       └── istio-monitors.yml
+└── roles/
+    ├── docker/
+    ├── k3s/
+    ├── istio/
+    ├── harbor/
+    ├── app/
+    └── monitoring/
 ```
+
+`site.yml` — главный playbook, вызывает роли в порядке: docker → k3s → istio → harbor → app → monitoring.

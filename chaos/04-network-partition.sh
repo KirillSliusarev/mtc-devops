@@ -1,31 +1,27 @@
 #!/usr/bin/env bash
-# NO set -e: interactive scripts with read must not abort on non-zero
-
-# =============================================================================
-# Сценарий 4: Network Partition — обрыв backend ↔ DB
-# AuthorizationPolicy DENY для TCP-трафика от backend к DB.
-# DENY только от источника backend, не блокирует istio health checks.
-# =============================================================================
+# Сценарий 4: Network Partition — обрыв связи backend с DB.
+# Кастомный сценарий. AuthorizationPolicy DENY блокирует TCP-трафик
+# от backend к DB на порт 5432. Backend не может выполнять запросы к PostgreSQL.
+# На Grafana (Panel "Backend Success vs Error Rate") error rate растёт до 100%.
+# Симулирует сетевой раздел между уровнями приложения.
 
 NAMESPACE="demo-app"
 
-echo "╔══════════════════════════════════════════════════════════╗"
-echo "║  СЦЕНАРИЙ 4: Network Partition (backend ↔ DB)           ║"
-echo "║  [КАСТОМНЫЙ]                                            ║"
-echo "╚══════════════════════════════════════════════════════════╝"
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+echo "=== Сценарий 4: Network Partition (backend <-> DB) [КАСТОМНЫЙ] ==="
 echo ""
-echo "ОТКРОЙ В БРАУЗЕРЕ:"
-echo "  📊 Приложение:  http://<VM-IP>:30133"
-echo "  📈 Grafana:     http://<VM-IP>:30000 → Chaos Engineering Demo"
+echo "Откройте в браузере:"
+echo "  Приложение: http://$(hostname -I | awk '{print $1}'):30133"
+echo "  Grafana:    http://$(hostname -I | awk '{print $1}'):30000  (Panel: Backend Success vs Error Rate)"
 echo ""
-echo "Что должно быть видно сейчас:"
-echo "  - DB: connected (зелёный)"
-echo "  - Backend пишет в БД (Insert ID растёт)"
+echo "Текущее состояние:"
+echo "  DB: connected (зелёный), Insert ID растёт"
 echo ""
-echo ">>> Нажми Enter чтобы ОБОРВАТЬ связь с DB <<<"
+echo "Нажмите Enter для обрыва связи с DB..."
 read -r
 
-echo "Обрыв связи: DENY TCP-трафика от backend к DB на порт 5432..."
+echo "Применение AuthorizationPolicy DENY для backend -> DB:5432..."
 kubectl apply -f - <<EOF
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
@@ -47,19 +43,14 @@ spec:
 EOF
 
 sleep 5
-echo "Готово! Трафик backend→DB заблокирован."
 echo ""
-echo "СМОТРИ В БРАУЗЕР:"
-echo "  📊 Приложение: DB: error (красный) — backend не может записать в БД"
-echo "  📈 Grafana → Chaos Engineering Demo: Error Rate spike"
+echo "Связь с DB разорвана. На странице приложения: DB: error (красный)."
 echo ""
-echo ">>> Нажми Enter чтобы восстановить связь <<<"
+echo "Нажмите Enter для восстановления связи..."
 read -r
 
 kubectl delete authorizationpolicy deny-backend-to-db -n "${NAMESPACE}" --ignore-not-found 2>/dev/null
 sleep 5
-echo "Связь восстановлена."
+echo "Связь восстановлена. DB снова connected (зелёный)."
 echo ""
-echo "Проверь: DB снова connected (зелёный)."
-echo ""
-echo "✓ Сценарий 4 завершён"
+echo "Сценарий 4 завершён."

@@ -6,7 +6,7 @@
 #
 # Run:
 #   docker run --rm \
-#     -e TARGET_HOST=192.168.0.40 \
+#     -e TARGET_HOST=<VM-IP> \
 #     -e TARGET_PORT=22 \
 #     -e TARGET_USER=ubuntu \
 #     -e TARGET_PASSWORD=my_password \
@@ -15,7 +15,7 @@
 # Если используется SSH ключ вместо пароля:
 #   docker run --rm \
 #     -v ~/.ssh:/root/.ssh:ro \
-#     -e TARGET_HOST=192.168.0.40 \
+#     -e TARGET_HOST=<VM-IP> \
 #     -e TARGET_USER=ubuntu \
 #     mtc-chaos
 

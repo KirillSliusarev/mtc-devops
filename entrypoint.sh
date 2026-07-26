@@ -13,7 +13,7 @@ TARGET_PASSWORD="${TARGET_PASSWORD:-}"
 
 if [ -z "${TARGET_HOST}" ]; then
     echo "ERROR: TARGET_HOST is required"
-    echo "Usage: docker run --rm -e TARGET_HOST=192.168.1.100 -e TARGET_USER=ubuntu [-e TARGET_PASSWORD=pass] mtc-chaos"
+    echo "Usage: docker run --rm -e TARGET_HOST=<VM-IP> -e TARGET_USER=<user> [-e TARGET_PASSWORD=<pass>] mtc-chaos"
     exit 1
 fi
 

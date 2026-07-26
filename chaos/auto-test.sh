@@ -34,13 +34,13 @@ generate_traffic() {
     done
 }
 
-echo "╔══════════════════════════════════════════════════════════╗"
-echo "║  AUTOMATED CHAOS TEST                                   ║"
-echo "║  4 scenarios × 3 min each + baselines                   ║"
-echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
-echo "📊 App:      ${APP_URL}"
-echo "📈 Grafana:  http://localhost:30000 → Chaos Engineering Demo"
+echo ""
+echo ""
+echo ""
+echo ""
+echo "App:      ${APP_URL}"
+echo "Grafana:  http://localhost:30000 → Chaos Engineering Demo"
 echo ""
 
 # Start background traffic
@@ -71,85 +71,85 @@ phase() {
 # Scenario 1: HTTP Latency (5s, 50%)
 # =============================================================================
 echo ""
-echo "╔══════════════════════════════════════════════════════════╗"
-echo "║  СЦЕНАРИЙ 1: HTTP Latency (5s, 50%)                     ║"
-echo "╚══════════════════════════════════════════════════════════╝"
+echo ""
+echo ""
+echo ""
 
 phase "BASELINE (normal)" 30
 
-echo "  >>> INJECTING 3s backend delay (DB_DELAY_MS=3000) <<<"
+echo "  INJECTING 3s backend delay (DB_DELAY_MS=3000) <<<"
 kubectl set env deployment/backend -n "${NAMESPACE}" DB_DELAY_MS=3000
 kubectl rollout status deployment/backend -n "${NAMESPACE}" --timeout=60s 2>/dev/null
 sleep 5
 
 phase "WITH FAULT INJECTION (5s delay)" 180
 
-echo "  >>> ROLLING BACK <<<"
+echo "  ROLLING BACK <<<"
 kubectl set env deployment/backend -n "${NAMESPACE}" DB_DELAY_MS=0
 kubectl rollout status deployment/backend -n "${NAMESPACE}" --timeout=60s 2>/dev/null
 sleep 5
 phase "RECOVERY" 30
-echo "✓ Scenario 1 complete"
+echo "Scenario 1 complete"
 
 # =============================================================================
 # Scenario 2: Harbor core down
 # =============================================================================
 echo ""
-echo "╔══════════════════════════════════════════════════════════╗"
-echo "║  СЦЕНАРИЙ 2: Harbor core down (503)                     ║"
-echo "╚══════════════════════════════════════════════════════════╝"
+echo ""
+echo ""
+echo ""
 
 phase "BASELINE (normal)" 30
 
-echo "  >>> DISABLING harbor-core <<<"
+echo "  DISABLING harbor-core <<<"
 kubectl scale deployment harbor-core -n "${HARBOR_NS}" --replicas=0
 sleep 5
 
 phase "WITH harbor-core DOWN" 180
 
-echo "  >>> RESTORING harbor-core <<<"
+echo "  RESTORING harbor-core <<<"
 kubectl scale deployment harbor-core -n "${HARBOR_NS}" --replicas=1
 kubectl rollout status deployment/harbor-core -n "${HARBOR_NS}" --timeout=120s 2>/dev/null
 sleep 5
 phase "RECOVERY" 30
-echo "✓ Scenario 2 complete"
+echo "Scenario 2 complete"
 
 # =============================================================================
 # Scenario 3: DB Latency (2000ms)
 # =============================================================================
 echo ""
-echo "╔══════════════════════════════════════════════════════════╗"
-echo "║  СЦЕНАРИЙ 3: DB Latency (2000ms per query)             ║"
-echo "╚══════════════════════════════════════════════════════════╝"
+echo ""
+echo ""
+echo ""
 
 phase "BASELINE (normal)" 30
 
-echo "  >>> INJECTING 2000ms DB delay <<<"
+echo "  INJECTING 2000ms DB delay <<<"
 kubectl set env deployment/backend -n "${NAMESPACE}" DB_DELAY_MS=2000
 kubectl rollout status deployment/backend -n "${NAMESPACE}" --timeout=60s 2>/dev/null
 sleep 5
 
 phase "WITH DB DELAY (2000ms)" 180
 
-echo "  >>> ROLLING BACK <<<"
+echo "  ROLLING BACK <<<"
 kubectl set env deployment/backend -n "${NAMESPACE}" DB_DELAY_MS=0
 kubectl rollout status deployment/backend -n "${NAMESPACE}" --timeout=60s 2>/dev/null
 sleep 5
 phase "RECOVERY" 30
-echo "✓ Scenario 3 complete"
+echo "Scenario 3 complete"
 
 # =============================================================================
 # Scenario 4: Network Partition (backend cannot reach DB)
 # =============================================================================
 echo ""
-echo "╔══════════════════════════════════════════════════════════╗"
-echo "║  СЦЕНАРИЙ 4: Network Partition (backend ↔ DB)          ║"
-echo "║  [КАСТОМНЫЙ]                                           ║"
-echo "╚══════════════════════════════════════════════════════════╝"
+echo ""
+echo ""
+echo ""
+echo ""
 
 phase "BASELINE (normal)" 30
 
-echo "  >>> BLOCKING backend→DB traffic <<<"
+echo "  BLOCKING backend→DB traffic <<<"
 cat <<YAML | kubectl apply -f -
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
@@ -173,17 +173,17 @@ sleep 5
 
 phase "WITH NETWORK PARTITION" 180
 
-echo "  >>> RESTORING connection <<<"
+echo "  RESTORING connection <<<"
 kubectl delete authorizationpolicy deny-backend-to-db -n "${NAMESPACE}" --ignore-not-found 2>/dev/null
 sleep 5
 phase "RECOVERY" 30
-echo "✓ Scenario 4 complete"
+echo "Scenario 4 complete"
 
 # =============================================================================
 echo ""
-echo "╔══════════════════════════════════════════════════════════╗"
-echo "║  ALL SCENARIOS COMPLETE                                 ║"
-echo "╚══════════════════════════════════════════════════════════╝"
+echo ""
+echo ""
+echo ""
 echo ""
 echo "Check Grafana → Chaos Engineering Demo for the full picture."
 echo "Each scenario should show a clear spike/dip during the fault period."
