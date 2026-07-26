@@ -40,7 +40,7 @@
 
 ### 1. HTTP Latency — задержка ответа backend (стандартный)
 
-**Описание:** backend получает переменную окружения DB_DELAY_MS=3000 и искусственно задерживает каждый HTTP-ответ на 3 секунды. Инъекция выполняется через rollout (обновление env-var) без участия Istio fault injection.
+**Описание:** backend получает переменную окружения RESPONSE_DELAY_MS=3000 и искусственно задерживает каждый HTTP-ответ на 3 секунды. Инъекция выполняется через rollout (обновление env-var), без участия Istio fault injection.
 
 #### Реальные причины
 
@@ -93,7 +93,7 @@ spec:
 
 ### 2. HTTP 500 — ошибки Harbor core (стандартный)
 
-**Описание:** deployment harbor-core масштабируется до 0 реплик (kubectl scale harbor-core --replicas=0). В результате Harbor API недоступен и возвращает HTTP 503 (Service Unavailable) вместо отдельных HTTP 500.
+**Описание:** EnvoyFilter добавляет HTTP fault abort (статус 500) на inbound-трафик harbor-nginx. Все запросы к Harbor UI и API возвращают HTTP 500. Инъекция работает на уровне Envoy sidecar, до того как запрос достигает контейнера nginx.
 
 #### Реальные причины
 
@@ -202,7 +202,7 @@ spec:
 
 ## Общие рекомендации по архитектуре
 
-### Istio层面的保护
+### Защита на уровне Istio
 
 ```yaml
 # Глобальный outlierDetection
@@ -228,7 +228,7 @@ spec:
         maxRetries: 3
 ```
 
-### K8s层面的保护
+### Защита на уровне Kubernetes
 
 ```yaml
 # Proper resource limits
