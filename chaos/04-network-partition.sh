@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+# (no set -e: read returns non-zero on EOF)
 
 # =============================================================================
 # Сценарий 4: Network Partition — полный обрыв backend ↔ DB

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+# (no set -e: read returns non-zero on EOF)
 
 # =============================================================================
 # Сценарий 2: HTTP 500 — Harbor core возвращает ошибки

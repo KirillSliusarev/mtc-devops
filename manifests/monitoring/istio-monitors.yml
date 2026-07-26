@@ -1,0 +1,61 @@
+---
+# Prometheus monitoring for Istio Control Plane (istiod)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: istiod
+  namespace: monitoring
+  labels:
+    release: kube-prometheus
+spec:
+  namespaceSelector:
+    matchNames:
+    - istio-system
+  selector:
+    matchLabels:
+      app: istiod
+  endpoints:
+  - port: http-monitoring
+    interval: 15s
+    path: /metrics
+---
+# Prometheus monitoring for Istio Ingress Gateway
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: istio-ingressgateway
+  namespace: monitoring
+  labels:
+    release: kube-prometheus
+spec:
+  namespaceSelector:
+    matchNames:
+    - istio-system
+  selector:
+    matchLabels:
+      app: istio-ingressgateway
+  endpoints:
+  - port: http-envoy-prom
+    interval: 15s
+    path: /stats/prometheus
+---
+# Prometheus monitoring for demo-app sidecars (envoy proxies)
+# PodMonitor scrapes each pod's istio-proxy container directly
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: istio-proxies
+  namespace: monitoring
+  labels:
+    release: kube-prometheus
+spec:
+  namespaceSelector:
+    matchNames:
+    - demo-app
+  selector:
+    matchLabels:
+      security.istio.io/tlsMode: istio
+  podMetricsEndpoints:
+  - port: http-envoy-prom
+    interval: 15s
+    path: /stats/prometheus

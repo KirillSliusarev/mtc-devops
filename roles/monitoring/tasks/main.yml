@@ -136,3 +136,15 @@
       - "Grafana: http://{{ ansible_host }}:30000 (admin / admin)"
       - "Dashboards: Chaos Engineering → Istio Mesh, Istio Service, Istio Workload"
       - "During chaos demo: watch p95 latency, error rate, success rate"
+
+- name: Apply Istio ServiceMonitors and PodMonitors
+  ansible.builtin.shell: |
+    kubectl apply -f /ansible/manifests/monitoring/istio-monitors.yml
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  changed_when: false
+
+- name: Wait for Prometheus targets to be up
+  ansible.builtin.shell: |
+    sleep 15
+  changed_when: false

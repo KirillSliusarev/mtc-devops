@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+# (no set -e: read returns non-zero on EOF)
 
 # =============================================================================
 # Сценарий 1: HTTP Latency — задержка ответа frontend→backend

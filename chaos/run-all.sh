@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+# (no set -e: read returns non-zero on EOF and would kill the script)
 
 # =============================================================================
 # Chaos Engineering Demo — запуск всех сценариев
@@ -44,13 +44,13 @@ for script in \
     "${SCRIPT_DIR}/02-http-500.sh" \
     "${SCRIPT_DIR}/03-db-latency.sh" \
     "${SCRIPT_DIR}/04-network-partition.sh"; do
-    
+
     if [ -f "${script}" ]; then
         echo ""
         echo "──────────────────────────────────────────────────────────"
         bash "${script}"
         echo "──────────────────────────────────────────────────────────"
-        
+
         if [ "${script}" != "${SCRIPT_DIR}/04-network-partition.sh" ]; then
             echo ""
             echo "Нажми Enter для следующего сценария..."
