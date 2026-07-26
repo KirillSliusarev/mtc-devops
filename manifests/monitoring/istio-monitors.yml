@@ -52,6 +52,7 @@ spec:
   namespaceSelector:
     matchNames:
     - demo-app
+    - harbor
   selector:
     matchLabels:
       security.istio.io/tlsMode: istio
