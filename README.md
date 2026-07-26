@@ -68,13 +68,14 @@ cd /tmp/mtc-devops
 
 | # | Сценарий | Инъекция | Эффект |
 |---|---|---|---|
-| 1 | HTTP Latency | `DB_DELAY_MS=3000` на deployment `backend` | Backend задерживает ответ на 3 с, P95 latency растёт |
-| 2 | Harbor core down | `kubectl scale deployment harbor-core --replicas=0` (namespace `harbor`) | Harbor API возвращает ошибку 5xx, UI недоступен |
+| 1 | HTTP Latency | `RESPONSE_DELAY_MS=3000` на deployment `backend` | Backend задерживает HTTP-ответ на 3 с, P95 latency растёт |
+| 2 | Harbor core down | `kubectl scale deployment harbor-core --replicas=0` (namespace `harbor`) | Harbor API возвращает 503, UI частично доступен (portal), login не работает |
 | 3 | DB Latency | `DB_DELAY_MS=2000` на deployment `backend` | Задержка DB-запросов 2 с, P95 latency растёт |
 | 4 | Network Partition | `AuthorizationPolicy DENY` (TCP порт 5432, от backend к db) | Backend не может записать в БД, DB status → error |
 
-Сценарии 1 и 3 отличаются амплитудой задержки (3000 мс против 2000 мс).
-Сценарий 4 — кастомный, использует Istio AuthorizationPolicy вместо env-инъекции.
+Сценарии 1 и 3 используют разные env-переменные backend: S1 задерживает
+HTTP-обработчик (`RESPONSE_DELAY_MS`), S3 задерживает DB-запрос (`DB_DELAY_MS`).
+Сценарий 4 — кастомный, использует Istio AuthorizationPolicy.
 
 Каждый сценарий: демонстрация до → внедрение ошибки → демонстрация после → откат.
 
