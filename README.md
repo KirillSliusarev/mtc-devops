@@ -69,7 +69,7 @@ cd /tmp/mtc-devops
 | # | Сценарий | Инъекция | Эффект |
 |---|---|---|---|
 | 1 | HTTP Latency | `RESPONSE_DELAY_MS=3000` на deployment `backend` | Backend задерживает HTTP-ответ на 3 с, P95 latency растёт |
-| 2 | Harbor core down | `kubectl scale deployment harbor-core --replicas=0` (namespace `harbor`) | Harbor API возвращает 503, UI частично доступен (portal), login не работает |
+| 2 | Harbor HTTP 500 | `EnvoyFilter` (HTTP fault abort 500, inbound на `harbour-nginx`) | 50% запросов к Harbor UI и API возвращают 500 |
 | 3 | DB Latency | `DB_DELAY_MS=2000` на deployment `backend` | Задержка DB-запросов 2 с, P95 latency растёт |
 | 4 | Network Partition | `AuthorizationPolicy DENY` (TCP порт 5432, от backend к db) | Backend не может записать в БД, DB status → error |
 
