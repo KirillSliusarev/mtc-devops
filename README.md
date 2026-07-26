@@ -8,8 +8,8 @@ Chaos Engineering стенд: разворачивает k3s + Istio + Harbor + 
 | Компонент | Описание |
 |---|---|
 | Docker | Контейнерная среда на ВМ |
-| k3s | Однонодовый Kubernetes (`v1.29.3+k3s1`), без Traefik |
-| Istio | Service mesh (`1.21.0`, профиль `default`), strict mTLS в namespace `demo-app` |
+| k3s | Однонодовый Kubernetes (`v1.31.4+k3s1`), без Traefik |
+| Istio | Service mesh (`1.24.0`, профиль `default`), strict mTLS в namespace `demo-app` |
 | Harbor | Приватный registry, 1 реплика на компонент (namespace `harbor`) |
 | demo-app | Frontend (nginx) → Backend (python + psycopg2) → DB (postgres), namespace `demo-app`, istio-injection enabled |
 | Monitoring | kube-prometheus-stack: Prometheus + Grafana, namespace `monitoring` |

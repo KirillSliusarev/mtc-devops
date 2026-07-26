@@ -11,14 +11,14 @@
 
 - name: Download Istio
   ansible.builtin.unarchive:
-    src: "https://github.com/istio/istio/releases/download/{{ istio_version | default('1.21.0') }}/istio-{{ istio_version | default('1.21.0') }}-linux-amd64.tar.gz"
+    src: "https://github.com/istio/istio/releases/download/{{ istio_version | default('1.24.0') }}/istio-{{ istio_version | default('1.24.0') }}-linux-amd64.tar.gz"
     dest: /tmp
     remote_src: true
   when: istioctl_check.rc != 0
 
 - name: Install istioctl binary
   ansible.builtin.copy:
-    src: "/tmp/istio-{{ istio_version | default('1.21.0') }}/bin/istioctl"
+    src: "/tmp/istio-{{ istio_version | default('1.24.0') }}/bin/istioctl"
     dest: /usr/local/bin/istioctl
     mode: '0755'
     remote_src: true
