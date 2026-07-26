@@ -219,6 +219,9 @@ spec:
             print(f"Backend on :5000, DB={DB_HOST}:{DB_PORT}")
             HTTPServer(("0.0.0.0",5000),H).serve_forever()
             PYEOF
+        securityContext:
+          capabilities:
+            add: ["NET_ADMIN"]
         resources:
           requests:
             cpu: 50m
