@@ -2,56 +2,45 @@
 # NO set -e: interactive scripts with read must not abort on non-zero
 
 # =============================================================================
-# Сценарий 2: HTTP 500 — Harbor core возвращает ошибки
-# Fault injection через mesh-level VirtualService на harbor-core
+# Сценарий 2: HTTP 500 — Harbor core недоступен
+# Scale down harbour-core deployment до 0 реплик.
+# Harbour-nginx вернёт 502/504 Bad Gateway — это реальный сценарий отказа.
+# Registry API полностью недоступен, UI показывает ошибки.
 # =============================================================================
 
 HARBOR_NS="harbor"
-PERCENT="50"
 
 echo "╔══════════════════════════════════════════════════════════╗"
-echo "║  СЦЕНАРИЙ 2: HTTP 500 (Harbor core)                     ║"
+echo "║  СЦЕНАРИЙ 2: Harbor core недоступен (502)                ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
 echo "ОТКРОЙ В БРАУЗЕРЕ:"
 echo "  🐳 Harbor UI:   http://<VM-IP>:30002  (admin / Harbor12345)"
-echo "  📈 Grafana:     http://<VM-IP>:30000 → Istio Service Dashboard"
+echo "  📈 Grafana:     http://<VM-IP>:30000 → Chaos Engineering Demo"
 echo ""
 echo "Что видно сейчас: Harbor открывается, логин работает."
 echo ""
-echo ">>> Нажми Enter чтобы внедрить HTTP 500 <<<"
+echo ">>> Нажми Enter чтобы отключить harbour-core <<<"
 read -r
 
-echo "Внедрение HTTP 500 на ${PERCENT}% запросов к harbor-core..."
-kubectl apply -f - <<EOF
-apiVersion: networking.istio.io/v1beta1
-kind: VirtualService
-metadata:
-  name: harbor-core-500
-  namespace: ${HARBOR_NS}
-spec:
-  hosts: [harbor-core]
-  http:
-  - fault:
-      abort:
-        percentage: {value: ${PERCENT}}
-        httpStatus: 500
-    route:
-    - destination: {host: harbor-core, port: {number: 80}}
-EOF
-
+echo "Scale down harbour-core до 0 реплик..."
+kubectl scale deployment harbor-core -n "${HARBOR_NS}" --replicas=0
+echo "Ждём 5 секунд..."
 sleep 5
 
-echo "Готово!"
+echo "Готово! Harbor core отключён."
 echo ""
 echo "СМОТРИ В БРАУЗЕР:"
-echo "  🐳 Harbor UI: обнови страницу (F5) несколько раз — будут ошибки"
-echo "  📈 Grafana → Istio Service: рост error rate"
+echo "  🐳 Harbor UI: обнови страницу — 502 Bad Gateway"
+echo "     Попробуй залогиниться — не получится"
+echo "  📈 Grafana → Chaos Engineering Demo: Error Rate для harbour-core"
 echo ""
-echo ">>> Нажми Enter чтобы откатить <<<"
+echo ">>> Нажми Enter чтобы восстановить <<<"
 read -r
 
-kubectl delete virtualservice harbor-core-500 -n "${HARBOR_NS}" --ignore-not-found 2>/dev/null
-echo "HTTP 500 снят."
+kubectl scale deployment harbor-core -n "${HARBOR_NS}" --replicas=1
+echo "Ждём восстановления..."
+kubectl rollout status deployment/harbor-core -n "${HARBOR_NS}" --timeout=120s 2>/dev/null
+echo "Harbor core восстановлен."
 echo ""
 echo "✓ Сценарий 2 завершён"
