@@ -40,7 +40,7 @@
 
 ### 1. HTTP Latency — задержка ответа backend (стандартный)
 
-**Описание:** задержка 5 секунд на 50% HTTP-запросов между frontend и backend.
+**Описание:** backend получает переменную окружения DB_DELAY_MS=3000 и искусственно задерживает каждый HTTP-ответ на 3 секунды. Инъекция выполняется через rollout (обновление env-var) без участия Istio fault injection.
 
 #### Реальные причины
 
@@ -93,7 +93,7 @@ spec:
 
 ### 2. HTTP 500 — ошибки Harbor core (стандартный)
 
-**Описание:** 50% запросов к Harbor core возвращают HTTP 500.
+**Описание:** deployment harbor-core масштабируется до 0 реплик (kubectl scale harbor-core --replicas=0). В результате Harbor API недоступен и возвращает HTTP 503 (Service Unavailable) вместо отдельных HTTP 500.
 
 #### Реальные причины
 
@@ -128,7 +128,7 @@ spec:
 
 ### 3. DB Latency — задержка между приложением и PostgreSQL (стандартный)
 
-**Описание:** задержка 3 секунды на 100% соединений между backend и PostgreSQL.
+**Описание:** backend получает переменную окружения DB_DELAY_MS=2000, каждый DB-запрос к PostgreSQL задерживается на 2 секунды. Инъекция выполняется через rollout (обновление env-var), без Istio fault injection.
 
 #### Реальные причины
 
@@ -164,7 +164,7 @@ spec:
 
 ### 4. Network Partition — обрыв backend ↔ DB (кастомный)
 
-**Описание:** полный обрыв сетевого соединения между backend и PostgreSQL.
+**Описание:** Istio AuthorizationPolicy с действием DENY запрещает трафик от backend principal к PostgreSQL на порт 5432, из-за чего backend не может установить соединение с БД. Эмулирует обрыв сети между backend и DB через сетевую политику service mesh.
 
 #### Реальные причины
 
