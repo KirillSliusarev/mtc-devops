@@ -18,7 +18,6 @@ cleanup() {
     fi
     kubectl delete envoyfilter harbor-nginx-abort -n "${HARBOR_NS}" --ignore-not-found 2>/dev/null
     kubectl delete vs backend-latency -n "${NAMESPACE}" --ignore-not-found 2>/dev/null
-    kubectl set env deployment/backend -n "${NAMESPACE}" RESPONSE_DELAY_MS=0 2>/dev/null
     kubectl set env deployment/backend -n "${NAMESPACE}" DB_DELAY_MS=0 2>/dev/null
     kubectl delete authorizationpolicy deny-backend-to-db -n "${NAMESPACE}" --ignore-not-found 2>/dev/null
     echo "Cleanup done."
@@ -78,16 +77,54 @@ echo ""
 
 phase "BASELINE (normal)" 30
 
-echo "  INJECTING 3s HTTP response delay (RESPONSE_DELAY_MS=3000)"
-kubectl set env deployment/backend -n "${NAMESPACE}" RESPONSE_DELAY_MS=3000
-kubectl rollout status deployment/backend -n "${NAMESPACE}" --timeout=60s 2>/dev/null
+echo "  INJECTING 3s Istio fault.delay on demo-vs (VirtualService)"
+cat <<YAML | kubectl apply -f -
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: demo-vs
+  namespace: ${NAMESPACE}
+spec:
+  hosts: ['*']
+  gateways: ['istio-system/demo-gateway']
+  http:
+  - match: [{uri: {prefix: /api/}}]
+    fault:
+      delay:
+        percentage: {value: 100}
+        fixedDelay: 3s
+    route:
+    - destination: {host: backend, port: {number: 5000}}
+  - match: [{uri: {prefix: /health}}]
+    route:
+    - destination: {host: backend, port: {number: 5000}}
+  - route:
+    - destination: {host: frontend, port: {number: 80}}
+YAML
 sleep 5
 
-phase "WITH FAULT INJECTION (5s delay)" 180
+phase "WITH FAULT INJECTION (3s delay)" 180
 
 echo "  ROLLING BACK"
-kubectl set env deployment/backend -n "${NAMESPACE}" RESPONSE_DELAY_MS=0
-kubectl rollout status deployment/backend -n "${NAMESPACE}" --timeout=60s 2>/dev/null
+cat <<YAML | kubectl apply -f -
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: demo-vs
+  namespace: ${NAMESPACE}
+spec:
+  hosts: ['*']
+  gateways: ['istio-system/demo-gateway']
+  http:
+  - match: [{uri: {prefix: /api/}}]
+    route:
+    - destination: {host: backend, port: {number: 5000}}
+  - match: [{uri: {prefix: /health}}]
+    route:
+    - destination: {host: backend, port: {number: 5000}}
+  - route:
+    - destination: {host: frontend, port: {number: 80}}
+YAML
 sleep 5
 phase "RECOVERY" 30
 echo "Scenario 1 complete"

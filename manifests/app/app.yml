@@ -145,8 +145,6 @@ spec:
           value: "demo123"
         - name: DB_DELAY_MS
           value: "0"
-        - name: RESPONSE_DELAY_MS
-          value: "0"
         command: ["sh", "-c"]
         args:
           - |
@@ -161,7 +159,6 @@ spec:
             DB_USER=os.environ.get("DB_USER","demo")
             DB_PASS=os.environ.get("DB_PASS","demo123")
             DB_DELAY_MS=int(os.environ.get("DB_DELAY_MS","0"))
-            RESPONSE_DELAY_MS=int(os.environ.get("RESPONSE_DELAY_MS","0"))
 
             def get_db():
                 if DB_DELAY_MS > 0:
@@ -185,8 +182,6 @@ spec:
                     if self.path=="/health":
                         self._r(200,{"status":"ok"})
                     elif self.path=="/api/status":
-                        if RESPONSE_DELAY_MS > 0:
-                            time.sleep(RESPONSE_DELAY_MS / 1000.0)
                         s=time.time()
                         try:
                             c=get_db(); cur=c.cursor()

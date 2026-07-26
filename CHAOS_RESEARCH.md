@@ -40,7 +40,7 @@
 
 ### 1. HTTP Latency — задержка ответа backend (стандартный)
 
-**Описание:** backend получает переменную окружения RESPONSE_DELAY_MS=3000 и искусственно задерживает каждый HTTP-ответ на 3 секунды. Инъекция выполняется через rollout (обновление env-var), без участия Istio fault injection.
+**Описание:** Istio VirtualService (demo-vs) с fault.delay задерживает все HTTP-запросы к `/api/` на 3 секунды на уровне Envoy ingress-gateway. Инъекция выполняется через обновление VirtualService, без изменения deployment.
 
 #### Реальные причины
 

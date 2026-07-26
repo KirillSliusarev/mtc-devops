@@ -68,14 +68,14 @@ cd /tmp/mtc-devops
 
 | # | Сценарий | Инъекция | Эффект |
 |---|---|---|---|
-| 1 | HTTP Latency | `RESPONSE_DELAY_MS=3000` на deployment `backend` | Backend задерживает HTTP-ответ на 3 с, P95 latency растёт |
+| 1 | HTTP Latency | Istio `VirtualService` `fault.delay` (3 с, gateway `demo-vs`) | Запросы к `/api/` задерживаются на 3 с, P95 latency растёт |
 | 2 | Harbor HTTP 500 | `EnvoyFilter` (HTTP fault abort 500, inbound на `harbour-nginx`) | 50% запросов к Harbor UI и API возвращают 500 |
 | 3 | DB Latency | `DB_DELAY_MS=2000` на deployment `backend` | Задержка DB-запросов 2 с, P95 latency растёт |
 | 4 | Network Partition | `AuthorizationPolicy DENY` (TCP порт 5432, от backend к db) | Backend не может записать в БД, DB status → error |
 
-Сценарии 1 и 3 используют разные env-переменные backend: S1 задерживает
-HTTP-обработчик (`RESPONSE_DELAY_MS`), S3 задерживает DB-запрос (`DB_DELAY_MS`).
-Сценарий 4 — кастомный, использует Istio AuthorizationPolicy.
+Сценарии 1, 2 и 4 используют функционал Istio (VirtualService fault.delay,
+EnvoyFilter, AuthorizationPolicy). Сценарий 3 использует application-level
+задержку DB-запроса, т.к. Istio не поддерживает TCP fault injection.
 
 Каждый сценарий: демонстрация до → внедрение ошибки → демонстрация после → откат.
 
