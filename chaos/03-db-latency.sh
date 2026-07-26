@@ -2,10 +2,10 @@
 # NO set -e: interactive scripts with read must not abort on non-zero
 
 # =============================================================================
-# Сценарий 3: DB Latency — задержка TCP-соединений backend→PostgreSQL
-# Использует tc netem (traffic control) внутри backend контейнера.
-# Backend имеет capability NET_ADMIN для управления qdisc.
-# Это РЕАЛЬНАЯ сетевая задержка на TCP-уровне, влияет только на DB-запросы.
+# Сценарий 3: DB Latency — задержка DB-запросов
+# Применяется через env DB_DELAY_MS на backend deployment.
+# Backend искусственно задерживает каждый DB-запрос на DB_DELAY_MS миллисекунд.
+# В реальном мире это симулирует медленную БД (disk I/O, lock contention).
 # =============================================================================
 
 NAMESPACE="demo-app"
@@ -26,31 +26,22 @@ echo ""
 echo ">>> Нажми Enter чтобы внедрить задержку <<<"
 read -r
 
-BACKEND_POD=$(kubectl get pods -n "${NAMESPACE}" -l app=backend -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+echo "Внедрение задержки ${DELAY_MS}ms на каждый DB-запрос..."
+kubectl set env deployment/backend -n "${NAMESPACE}" DB_DELAY_MS="${DELAY_MS}"
+echo "Ждём рестарта backend..."
+kubectl rollout status deployment/backend -n "${NAMESPACE}" --timeout=60s
 
-echo "Внедрение задержки ${DELAY_MS}ms на TCP-трафик в backend pod..."
-echo "  Backend pod: ${BACKEND_POD}"
-
-# Install tc and apply netem delay
-kubectl exec -n "${NAMESPACE}" "${BACKEND_POD}" -c backend -- sh -c '
-    which tc >/dev/null 2>&1 || (apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq iproute2 >/dev/null 2>&1)
-    tc qdisc add dev eth0 root netem delay '"${DELAY_MS}"'ms 2>/dev/null || \
-    tc qdisc change dev eth0 root netem delay '"${DELAY_MS}"'ms
-'
-
-sleep 3
 echo "Готово! Задержка ${DELAY_MS}ms активна."
 echo ""
 echo "СМОТРИ В БРАУЗЕР:"
-echo "  📊 Приложение: DB response вырастет до ~${DELAY_MS}ms (значение в JSON)"
+echo "  📊 Приложение: DB response вырастет до ~${DELAY_MS}ms"
 echo "  📈 Grafana → Chaos Engineering Demo: P95 Response Time spike"
 echo ""
 echo ">>> Нажми Enter чтобы откатить <<<"
 read -r
 
-# Rollback
-kubectl exec -n "${NAMESPACE}" "${BACKEND_POD}" -c backend -- sh -c 'tc qdisc del dev eth0 root 2>/dev/null || true'
-
+kubectl set env deployment/backend -n "${NAMESPACE}" DB_DELAY_MS="0"
+kubectl rollout status deployment/backend -n "${NAMESPACE}" --timeout=60s
 sleep 3
 echo "Задержка снята."
 echo ""

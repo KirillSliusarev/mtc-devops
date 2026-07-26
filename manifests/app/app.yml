@@ -143,6 +143,8 @@ spec:
           value: "demo"
         - name: DB_PASS
           value: "demo123"
+        - name: DB_DELAY_MS
+          value: "0"
         command: ["sh", "-c"]
         args:
           - |
@@ -156,8 +158,11 @@ spec:
             DB_NAME=os.environ.get("DB_NAME","demo")
             DB_USER=os.environ.get("DB_USER","demo")
             DB_PASS=os.environ.get("DB_PASS","demo123")
+            DB_DELAY_MS=int(os.environ.get("DB_DELAY_MS","0"))
 
             def get_db():
+                if DB_DELAY_MS > 0:
+                    time.sleep(DB_DELAY_MS / 1000.0)
                 return psycopg2.connect(host=DB_HOST,port=DB_PORT,dbname=DB_NAME,
                     user=DB_USER,password=DB_PASS,connect_timeout=5,
                     options="-c statement_timeout=5000")
@@ -219,9 +224,6 @@ spec:
             print(f"Backend on :5000, DB={DB_HOST}:{DB_PORT}")
             HTTPServer(("0.0.0.0",5000),H).serve_forever()
             PYEOF
-        securityContext:
-          capabilities:
-            add: ["NET_ADMIN"]
         resources:
           requests:
             cpu: 50m
