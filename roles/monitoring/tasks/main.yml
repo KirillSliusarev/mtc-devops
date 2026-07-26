@@ -58,37 +58,10 @@
           limits:
             cpu: 200m
             memory: 256Mi
-        # Grafana auto-provisions Prometheus datasource from helm
-        dashboardProviders:
-          dashboardproviders.yaml:
-            apiVersion: 1
-            providers:
-            - name: 'default'
-              orgId: 1
-              folder: 'Chaos Engineering'
-              type: file
-              disableDeletion: false
-              editable: true
-              options:
-                path: /var/lib/grafana/dashboards/default
-        dashboards:
-          default:
-            istio-mesh:
-              gnetId: 7639
-              revision: 22
-              datasource: Prometheus
-            istio-service:
-              gnetId: 7636
-              revision: 22
-              datasource: Prometheus
-            istio-workload:
-              gnetId: 7630
-              revision: 22
-              datasource: Prometheus
-            kubernetes-pods:
-              gnetId: 11100
-              revision: 1
-              datasource: Prometheus
+        # No gnetId dashboards — they're unreliable and often use wrong metrics.
+        # Instead, we deploy a custom dashboard via ConfigMap (chaos-dashboard.yml)
+        # and Istio ServiceMonitors separately after helm install.
+        dashboardProviders: {}
       
       # Disable heavy components
       alertmanager:
@@ -139,7 +112,76 @@
 
 - name: Apply Istio ServiceMonitors and PodMonitors
   ansible.builtin.shell: |
-    kubectl apply -f /ansible/manifests/monitoring/istio-monitors.yml
+    kubectl apply -f - <<'YEOF'
+    apiVersion: monitoring.coreos.com/v1
+    kind: ServiceMonitor
+    metadata:
+      name: istiod
+      namespace: monitoring
+      labels:
+        release: kube-prometheus
+    spec:
+      namespaceSelector:
+        matchNames: [istio-system]
+      selector:
+        matchLabels: {app: istiod}
+      endpoints:
+      - {port: http-monitoring, interval: 15s, path: /metrics}
+    ---
+    apiVersion: monitoring.coreos.com/v1
+    kind: ServiceMonitor
+    metadata:
+      name: istio-ingressgateway
+      namespace: monitoring
+      labels:
+        release: kube-prometheus
+    spec:
+      namespaceSelector:
+        matchNames: [istio-system]
+      selector:
+        matchLabels: {app: istio-ingressgateway}
+      endpoints:
+      - {port: http-envoy-prom, interval: 15s, path: /stats/prometheus}
+    ---
+    apiVersion: monitoring.coreos.com/v1
+    kind: PodMonitor
+    metadata:
+      name: istio-proxies
+      namespace: monitoring
+      labels:
+        release: kube-prometheus
+    spec:
+      namespaceSelector:
+        matchNames: [demo-app]
+      selector:
+        matchLabels: {security.istio.io/tlsMode: istio}
+      podMetricsEndpoints:
+      - {port: http-envoy-prom, interval: 15s, path: /stats/prometheus}
+    YEOF
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  changed_when: false
+
+- name: Apply custom Chaos Engineering dashboard
+  ansible.builtin.copy:
+    dest: /tmp/chaos-dashboard.yml
+    content: |
+      {% raw %}
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: chaos-dashboard
+        namespace: monitoring
+        labels:
+          grafana_dashboard: "1"
+          release: kube-prometheus
+      data:
+        chaos-demo.json: |
+          {"title":"Chaos Engineering Demo","uid":"chaos-demo","schemaVersion":39,"version":1,"refresh":"5s","time":{"from":"now-15m","to":"now"},"panels":[{"id":1,"title":"Request Rate (req/s)","type":"timeseries","gridPos":{"h":8,"w":12,"x":0,"y":0},"datasource":{"type":"prometheus","uid":"Prometheus"},"targets":[{"expr":"sum(rate(istio_requests_total[1m])) by (destination_workload)","legendFormat":"{{destination_workload}}","refId":"A"}],"fieldConfig":{"defaults":{"unit":"reqps"},"overrides":[]}},{"id":2,"title":"P95 Response Time (ms)","type":"timeseries","gridPos":{"h":8,"w":12,"x":12,"y":0},"datasource":{"type":"prometheus","uid":"Prometheus"},"targets":[{"expr":"histogram_quantile(0.95, sum(rate(istio_request_duration_milliseconds_bucket[1m])) by (le, destination_workload))","legendFormat":"p95 {{destination_workload}}","refId":"A"}],"fieldConfig":{"defaults":{"unit":"ms"},"overrides":[]}},{"id":3,"title":"Error Rate (%)","type":"timeseries","gridPos":{"h":8,"w":12,"x":0,"y":8},"datasource":{"type":"prometheus","uid":"Prometheus"},"targets":[{"expr":"sum(rate(istio_requests_total{response_code=~\"4..|5..\"}[1m])) by (destination_workload) / sum(rate(istio_requests_total[1m])) by (destination_workload) * 100","legendFormat":"{{destination_workload}}","refId":"A"}],"fieldConfig":{"defaults":{"unit":"percent","max":100,"min":0},"overrides":[]}},{"id":4,"title":"Success Rate (%)","type":"timeseries","gridPos":{"h":8,"w":12,"x":12,"y":8},"datasource":{"type":"prometheus","uid":"Prometheus"},"targets":[{"expr":"sum(rate(istio_requests_total{response_code!~\"4..|5..\"}[1m])) by (destination_workload) / sum(rate(istio_requests_total[1m])) by (destination_workload) * 100","legendFormat":"{{destination_workload}}","refId":"A"}],"fieldConfig":{"defaults":{"unit":"percent","max":100,"min":0},"overrides":[]}}]}
+      {% endraw %}
+
+- name: Apply dashboard
+  ansible.builtin.shell: kubectl apply -f /tmp/chaos-dashboard.yml
   environment:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
   changed_when: false

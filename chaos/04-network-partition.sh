@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# (no set -e: read returns non-zero on EOF)
+# NO set -e: interactive scripts with read must not abort on non-zero
 
 # =============================================================================
 # Сценарий 4: Network Partition — полный обрыв backend ↔ DB
-# Кастомный.
+# Кастомный. AuthorizationPolicy DENY ALL на DB pod.
 # =============================================================================
 
 NAMESPACE="demo-app"
@@ -15,7 +15,7 @@ echo "╚═══════════════════════�
 echo ""
 echo "ОТКРОЙ В БРАУЗЕРЕ:"
 echo "  📊 Приложение:  http://<VM-IP>:30133"
-echo "  📈 Grafana:     http://<VM-IP>:30000  → Istio Workload Dashboard"
+echo "  📈 Grafana:     http://<VM-IP>:30000 → Istio Workload Dashboard"
 echo ""
 echo "Что должно быть видно сейчас:"
 echo "  - DB: connected (зелёный)"
@@ -25,7 +25,7 @@ echo ">>> Нажми Enter чтобы ОБОРВАТЬ связь с DB <<<"
 read -r
 
 echo "Обрыв связи: DENY ALL трафика к DB..."
-cat <<EOF | kubectl apply -f -
+kubectl apply -f - <<EOF
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
 metadata:
@@ -39,7 +39,9 @@ spec:
   rules:
   - {}
 EOF
-sleep 3
+
+sleep 5
+
 echo "Готово! Связь с DB полностью разорвана."
 echo ""
 echo "СМОТРИ В БРАУЗЕР:"
@@ -49,7 +51,8 @@ echo ""
 echo ">>> Нажми Enter чтобы восстановить связь <<<"
 read -r
 
-kubectl delete authorizationpolicy deny-all-to-db -n "${NAMESPACE}" --ignore-not-found
+kubectl delete authorizationpolicy deny-all-to-db -n "${NAMESPACE}" --ignore-not-found 2>/dev/null
+
 sleep 5
 echo "Связь восстановлена."
 echo ""

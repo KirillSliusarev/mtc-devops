@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# (no set -e: read returns non-zero on EOF)
+# NO set -e: interactive scripts with read must not abort on non-zero
 
 # =============================================================================
 # Сценарий 3: DB Latency — задержка между backend и PostgreSQL
-# Модифицирует gateway VirtualService (demo-vs) для fault injection
 # =============================================================================
 
 NAMESPACE="demo-app"
@@ -25,7 +24,7 @@ echo ">>> Нажми Enter чтобы внедрить задержку <<<"
 read -r
 
 echo "Внедрение задержки ${DELAY} на ВСЕ запросы к /api/..."
-cat <<EOF | kubectl apply -f -
+kubectl apply -f - <<EOF
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
@@ -48,6 +47,9 @@ spec:
   - route:
     - destination: {host: frontend, port: {number: 80}}
 EOF
+
+sleep 5
+
 echo "Готово!"
 echo ""
 echo "СМОТРИ В БРАУЗЕР:"
@@ -58,7 +60,7 @@ echo ">>> Нажми Enter чтобы откатить <<<"
 read -r
 
 # Откат
-cat <<EOF | kubectl apply -f -
+kubectl apply -f - <<EOF
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
@@ -77,6 +79,8 @@ spec:
   - route:
     - destination: {host: frontend, port: {number: 80}}
 EOF
+
+sleep 3
 echo "Задержка снята."
 echo ""
 echo "✓ Сценарий 3 завершён"

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# (no set -e: read returns non-zero on EOF)
+# NO set -e: interactive scripts with read must not abort on non-zero
 
 # =============================================================================
 # Сценарий 1: HTTP Latency — задержка ответа frontend→backend
-# Модифицирует gateway VirtualService (demo-vs) для fault injection
+# Fault injection через gateway VirtualService (demo-vs)
 # =============================================================================
 
 NAMESPACE="demo-app"
@@ -27,7 +27,7 @@ echo ">>> Нажми Enter чтобы внедрить задержку <<<"
 read -r
 
 echo "Внедрение задержки ${DELAY} на ${PERCENT}% запросов..."
-cat <<EOF | kubectl apply -f -
+kubectl apply -f - <<EOF
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
@@ -50,7 +50,11 @@ spec:
   - route:
     - destination: {host: frontend, port: {number: 80}}
 EOF
-echo "Готово!"
+
+# Wait for envoy config to propagate
+sleep 5
+
+echo "Готово! Задержка активна."
 echo ""
 echo "СМОТРИ В БРАУЗЕР:"
 echo "  📊 ~50% запросов к /api/ будут идти 5+ секунд"
@@ -60,7 +64,7 @@ echo ">>> Нажми Enter чтобы откатить <<<"
 read -r
 
 # Откат
-cat <<EOF | kubectl apply -f -
+kubectl apply -f - <<EOF
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
@@ -79,6 +83,8 @@ spec:
   - route:
     - destination: {host: frontend, port: {number: 80}}
 EOF
+
+sleep 3
 echo "Задержка снята."
 echo ""
 echo "✓ Сценарий 1 завершён"
