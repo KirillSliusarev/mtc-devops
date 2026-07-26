@@ -12,8 +12,8 @@ all:
       ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
   vars:
     # Версии
-    k3s_version: "v1.31.4+k3s1"
-    istio_version: "1.24.0"
+    k3s_version: "v1.29.3+k3s1"
+    istio_version: "1.21.0"
     harbor_version: "latest"
 
     # Сеть
