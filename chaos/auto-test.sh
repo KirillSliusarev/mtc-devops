@@ -18,6 +18,7 @@ cleanup() {
     fi
     kubectl delete vs backend-latency -n "${NAMESPACE}" --ignore-not-found 2>/dev/null
     kubectl scale deployment harbor-core -n "${HARBOR_NS}" --replicas=1 2>/dev/null
+    kubectl set env deployment/backend -n "${NAMESPACE}" RESPONSE_DELAY_MS=0 2>/dev/null
     kubectl set env deployment/backend -n "${NAMESPACE}" DB_DELAY_MS=0 2>/dev/null
     kubectl delete authorizationpolicy deny-backend-to-db -n "${NAMESPACE}" --ignore-not-found 2>/dev/null
     echo "Cleanup done."
@@ -77,15 +78,15 @@ echo ""
 
 phase "BASELINE (normal)" 30
 
-echo "  INJECTING 3s backend delay (DB_DELAY_MS=3000) <<<"
-kubectl set env deployment/backend -n "${NAMESPACE}" DB_DELAY_MS=3000
+echo "  INJECTING 3s HTTP response delay (RESPONSE_DELAY_MS=3000)"
+kubectl set env deployment/backend -n "${NAMESPACE}" RESPONSE_DELAY_MS=3000
 kubectl rollout status deployment/backend -n "${NAMESPACE}" --timeout=60s 2>/dev/null
 sleep 5
 
 phase "WITH FAULT INJECTION (5s delay)" 180
 
-echo "  ROLLING BACK <<<"
-kubectl set env deployment/backend -n "${NAMESPACE}" DB_DELAY_MS=0
+echo "  ROLLING BACK"
+kubectl set env deployment/backend -n "${NAMESPACE}" RESPONSE_DELAY_MS=0
 kubectl rollout status deployment/backend -n "${NAMESPACE}" --timeout=60s 2>/dev/null
 sleep 5
 phase "RECOVERY" 30
