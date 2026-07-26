@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# NO set -e: interactive scripts with read must not abort on non-zero
+# NO set -e
 
 # =============================================================================
-# Сценарий 1: HTTP Latency — задержка ответа frontend→backend
-# Fault injection через gateway VirtualService (demo-vs)
+# Сценарий 1: HTTP Latency — задержка HTTP-ответа backend
+# Mesh-level VirtualService delay на host=backend (sidecar перехватывает)
+# Это добавляет задержку к HTTP-ответу ОТ backend.
+# P95 Response Time на Grafana чётко покажет spike.
 # =============================================================================
 
 NAMESPACE="demo-app"
 DELAY="5s"
-PERCENT="50"
+PERCENT="100"
 
 echo "╔══════════════════════════════════════════════════════════╗"
 echo "║  СЦЕНАРИЙ 1: HTTP Latency (frontend → backend)          ║"
@@ -16,7 +18,8 @@ echo "╚═══════════════════════�
 echo ""
 echo "ОТКРОЙ В БРАУЗЕРЕ:"
 echo "  📊 Приложение:  http://<VM-IP>:30133"
-echo "  📈 Grafana:     http://<VM-IP>:30000 → Istio Service Dashboard"
+echo "  📈 Grafana:     http://<VM-IP>:30000 → Chaos Engineering Demo"
+echo "  📊 Панель: Backend P95 Response Time"
 echo ""
 echo "Что видно сейчас:"
 echo "  - Страница обновляется каждые 2с"
@@ -26,64 +29,42 @@ echo ""
 echo ">>> Нажми Enter чтобы внедрить задержку <<<"
 read -r
 
-echo "Внедрение задержки ${DELAY} на ${PERCENT}% запросов..."
+echo "Внедрение задержки ${DELAY} на все запросы к backend..."
+# Mesh-level VirtualService: Istio sidecar applies delay on inbound traffic to backend
 kubectl apply -f - <<EOF
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
-  name: demo-vs
+  name: backend-latency
   namespace: ${NAMESPACE}
 spec:
-  hosts: ['*']
-  gateways: ['istio-system/demo-gateway']
+  hosts:
+  - backend
   http:
-  - match: [{uri: {prefix: /api/}}]
-    fault:
+  - fault:
       delay:
-        percentage: {value: ${PERCENT}}
+        percentage:
+          value: ${PERCENT}
         fixedDelay: ${DELAY}
     route:
-    - destination: {host: backend, port: {number: 5000}}
-  - match: [{uri: {prefix: /health}}]
-    route:
-    - destination: {host: backend, port: {number: 5000}}
-  - route:
-    - destination: {host: frontend, port: {number: 80}}
+    - destination:
+        host: backend
+        port:
+          number: 5000
 EOF
-
-# Wait for envoy config to propagate
 sleep 5
 
-echo "Готово! Задержка активна."
+echo "Готово! Задержка ${DELAY} активна."
 echo ""
 echo "СМОТРИ В БРАУЗЕР:"
-echo "  📊 ~50% запросов к /api/ будут идти 5+ секунд"
-echo "  📈 Grafana → Istio Service: spike p95 latency"
+echo "  📊 Приложение: загрузка займёт ~${DELAY}"
+echo "  📈 Grafana → Chaos Engineering Demo → Backend P95 Response Time:"
+echo "     spike до ~${DELAY}"
 echo ""
 echo ">>> Нажми Enter чтобы откатить <<<"
 read -r
 
-# Откат
-kubectl apply -f - <<EOF
-apiVersion: networking.istio.io/v1beta1
-kind: VirtualService
-metadata:
-  name: demo-vs
-  namespace: ${NAMESPACE}
-spec:
-  hosts: ['*']
-  gateways: ['istio-system/demo-gateway']
-  http:
-  - match: [{uri: {prefix: /api/}}]
-    route:
-    - destination: {host: backend, port: {number: 5000}}
-  - match: [{uri: {prefix: /health}}]
-    route:
-    - destination: {host: backend, port: {number: 5000}}
-  - route:
-    - destination: {host: frontend, port: {number: 80}}
-EOF
-
+kubectl delete virtualservice backend-latency -n "${NAMESPACE}" --ignore-not-found 2>/dev/null
 sleep 3
 echo "Задержка снята."
 echo ""

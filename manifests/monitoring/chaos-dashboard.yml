@@ -1,6 +1,6 @@
 ---
 # Custom Grafana dashboard for Chaos Engineering demo
-# Simple, reliable, uses metrics that actually exist in our setup
+# 4 panels, each clearly reacts to one or more chaos scenarios
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -12,123 +12,101 @@ metadata:
 data:
   chaos-demo.json: |
     {
-      "annotations": {"list": []},
+      "annotations": {"list": [{"name": "Scenarios", "enable": true, "iconColor": "rgba(0, 211, 255, 1)", "tags": ["scenario"]}]},
       "title": "Chaos Engineering Demo",
       "uid": "chaos-demo",
       "schemaVersion": 39,
-      "version": 1,
+      "version": 2,
       "refresh": "5s",
-      "time": {"from": "now-15m", "to": "now"},
-      "templating": {
-        "list": [
-          {
-            "name": "datasource",
-            "type": "datasource",
-            "query": "prometheus",
-            "current": {"text": "Prometheus", "value": "Prometheus"}
-          }
-        ]
-      },
+      "tags": ["chaos", "istio"],
+      "time": {"from": "now-30m", "to": "now"},
+      "templating": {"list": []},
       "panels": [
         {
           "id": 1,
-          "title": "Request Rate (req/s)",
+          "title": "Backend P95 Response Time (ms)",
+          "description": "Spikes during Scenario 1 (HTTP Latency) and Scenario 3 (DB Latency)",
           "type": "timeseries",
-          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+          "gridPos": {"h": 9, "w": 12, "x": 0, "y": 0},
           "datasource": {"type": "prometheus", "uid": "Prometheus"},
+          "fieldConfig": {"defaults": {"unit": "ms"}, "overrides": []},
+          "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
           "targets": [
             {
-              "expr": "sum(rate(istio_requests_total[1m])) by (destination_workload)",
-              "legendFormat": "{{destination_workload}}",
+              "expr": "histogram_quantile(0.95, sum(rate(istio_request_duration_milliseconds_bucket{destination_workload=\"backend\"}[30s])) by (le))",
+              "legendFormat": "P95 backend",
               "refId": "A"
+            },
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(istio_request_duration_milliseconds_bucket{destination_workload=\"backend\"}[30s])) by (le))",
+              "legendFormat": "P50 backend",
+              "refId": "B"
             }
-          ],
-          "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []}
+          ]
         },
         {
           "id": 2,
-          "title": "P95 Response Time (ms)",
+          "title": "Backend Request Rate & Errors (req/s)",
+          "description": "Errors spike during Scenario 4 (Network Partition — backend returns 503)",
           "type": "timeseries",
-          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+          "gridPos": {"h": 9, "w": 12, "x": 12, "y": 0},
           "datasource": {"type": "prometheus", "uid": "Prometheus"},
+          "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+          "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
           "targets": [
             {
-              "expr": "histogram_quantile(0.95, sum(rate(istio_request_duration_milliseconds_bucket[1m])) by (le, destination_workload))",
-              "legendFormat": "p95 {{destination_workload}}",
+              "expr": "sum(rate(istio_requests_total{destination_workload=\"backend\"}[30s]))",
+              "legendFormat": "Total requests",
               "refId": "A"
+            },
+            {
+              "expr": "sum(rate(istio_requests_total{destination_workload=\"backend\",response_code=~\"5..\"}[30s]))",
+              "legendFormat": "5xx errors",
+              "refId": "B"
             }
-          ],
-          "fieldConfig": {"defaults": {"unit": "ms"}, "overrides": []}
+          ]
         },
         {
           "id": 3,
-          "title": "Error Rate (%)",
+          "title": "Harbor Core Health",
+          "description": "Drops to 0 during Scenario 2 (Harbor core down)",
           "type": "timeseries",
-          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+          "gridPos": {"h": 9, "w": 12, "x": 0, "y": 9},
           "datasource": {"type": "prometheus", "uid": "Prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+          "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
           "targets": [
             {
-              "expr": "sum(rate(istio_requests_total{response_code=~\"4..|5..\"}[1m])) by (destination_workload) / sum(rate(istio_requests_total[1m])) by (destination_workload) * 100",
-              "legendFormat": "{{destination_workload}}",
+              "expr": "kube_deployment_status_replicas{deployment=\"harbor-core\"}",
+              "legendFormat": "harbor-core replicas",
               "refId": "A"
+            },
+            {
+              "expr": "up{job=\"monitoring/istio-ingressgateway\"}",
+              "legendFormat": "ingress-gateway up",
+              "refId": "B"
             }
-          ],
-          "fieldConfig": {"defaults": {"unit": "percent", "max": 100, "min": 0}, "overrides": []}
+          ]
         },
         {
           "id": 4,
-          "title": "Success Rate (%)",
+          "title": "Backend Success vs Error Rate (%)",
+          "description": "Success drops / Error rises during Scenario 4 (Network Partition)",
           "type": "timeseries",
-          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+          "gridPos": {"h": 9, "w": 12, "x": 12, "y": 9},
           "datasource": {"type": "prometheus", "uid": "Prometheus"},
-          "target": [],
+          "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}, "overrides": []},
+          "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
           "targets": [
             {
-              "expr": "sum(rate(istio_requests_total{response_code!~\"4..|5..\"}[1m])) by (destination_workload) / sum(rate(istio_requests_total[1m])) by (destination_workload) * 100",
-              "legendFormat": "{{destination_workload}}",
+              "expr": "sum(rate(istio_requests_total{destination_workload=\"backend\",response_code!~\"5..\"}[30s])) / sum(rate(istio_requests_total{destination_workload=\"backend\"}[30s])) * 100",
+              "legendFormat": "Success rate %",
               "refId": "A"
-            }
-          ],
-          "fieldConfig": {"defaults": {"unit": "percent", "max": 100, "min": 0}, "overrides": []}
-        },
-        {
-          "id": 5,
-          "title": "DB Query Latency (ms)",
-          "type": "stat",
-          "gridPos": {"h": 4, "w": 6, "x": 0, "y": 16},
-          "datasource": {"type": "prometheus", "uid": "Prometheus"},
-          "targets": [
+            },
             {
-              "expr": "histogram_quantile(0.95, sum(rate(istio_tcp_connections_closed_total[1m])) by (le, destination_workload))",
-              "refId": "A"
-            }
-          ]
-        },
-        {
-          "id": 6,
-          "title": "Active Connections",
-          "type": "stat",
-          "gridPos": {"h": 4, "w": 6, "x": 6, "y": 16},
-          "datasource": {"type": "prometheus", "uid": "Prometheus"},
-          "targets": [
-            {
-              "expr": "sum(istio_tcp_connections_opened_total) by (destination_workload)",
-              "refId": "A"
-            }
-          ]
-        },
-        {
-          "id": 7,
-          "title": "Pod Status",
-          "type": "table",
-          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 20},
-          "datasource": {"type": "prometheus", "uid": "Prometheus"},
-          "targets": [
-            {
-              "expr": "kube_pod_status_phase{namespace=~\"demo-app|harbor\"}",
-              "refId": "A",
-              "format": "table",
-              "instant": true
+              "expr": "sum(rate(istio_requests_total{destination_workload=\"backend\",response_code=~\"5..\"}[30s])) / sum(rate(istio_requests_total{destination_workload=\"backend\"}[30s])) * 100",
+              "legendFormat": "Error rate %",
+              "refId": "B"
             }
           ]
         }

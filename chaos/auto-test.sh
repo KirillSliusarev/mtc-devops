@@ -16,31 +16,10 @@ cleanup() {
     if [ -n "${TRAFFIC_PID}" ]; then
         kill "${TRAFFIC_PID}" 2>/dev/null
     fi
-    # Ensure all chaos resources are removed
     kubectl delete vs backend-latency -n "${NAMESPACE}" --ignore-not-found 2>/dev/null
     kubectl scale deployment harbor-core -n "${HARBOR_NS}" --replicas=1 2>/dev/null
     kubectl set env deployment/backend -n "${NAMESPACE}" DB_DELAY_MS=0 2>/dev/null
     kubectl delete authorizationpolicy deny-backend-to-db -n "${NAMESPACE}" --ignore-not-found 2>/dev/null
-    # Restore demo-vs to clean state
-    cat <<YAML | kubectl apply -f - 2>/dev/null
-apiVersion: networking.istio.io/v1beta1
-kind: VirtualService
-metadata:
-  name: demo-vs
-  namespace: ${NAMESPACE}
-spec:
-  hosts: ['*']
-  gateways: ['istio-system/demo-gateway']
-  http:
-  - match: [{uri: {prefix: /api/}}]
-    route:
-    - destination: {host: backend, port: {number: 5000}}
-  - match: [{uri: {prefix: /health}}]
-    route:
-    - destination: {host: backend, port: {number: 5000}}
-  - route:
-    - destination: {host: frontend, port: {number: 80}}
-YAML
     echo "Cleanup done."
 }
 trap cleanup EXIT
@@ -98,54 +77,33 @@ echo "╚═══════════════════════�
 
 phase "BASELINE (normal)" 30
 
-echo "  >>> INJECTING 5s latency on 50% requests <<<"
+echo "  >>> INJECTING 5s latency on backend <<<"
 cat <<YAML | kubectl apply -f -
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
-  name: demo-vs
+  name: backend-latency
   namespace: ${NAMESPACE}
 spec:
-  hosts: ['*']
-  gateways: ['istio-system/demo-gateway']
+  hosts:
+  - backend
   http:
-  - match: [{uri: {prefix: /api/}}]
-    fault:
+  - fault:
       delay:
-        percentage: {value: 50}
+        percentage: {value: 100}
         fixedDelay: 5s
     route:
-    - destination: {host: backend, port: {number: 5000}}
-  - match: [{uri: {prefix: /health}}]
-    route:
-    - destination: {host: backend, port: {number: 5000}}
-  - route:
-    - destination: {host: frontend, port: {number: 80}}
+    - destination:
+        host: backend
+        port:
+          number: 5000
 YAML
 sleep 5
 
 phase "WITH FAULT INJECTION (5s delay)" 180
 
 echo "  >>> ROLLING BACK <<<"
-cat <<YAML | kubectl apply -f -
-apiVersion: networking.istio.io/v1beta1
-kind: VirtualService
-metadata:
-  name: demo-vs
-  namespace: ${NAMESPACE}
-spec:
-  hosts: ['*']
-  gateways: ['istio-system/demo-gateway']
-  http:
-  - match: [{uri: {prefix: /api/}}]
-    route:
-    - destination: {host: backend, port: {number: 5000}}
-  - match: [{uri: {prefix: /health}}]
-    route:
-    - destination: {host: backend, port: {number: 5000}}
-  - route:
-    - destination: {host: frontend, port: {number: 80}}
-YAML
+kubectl delete virtualservice backend-latency -n "${NAMESPACE}" --ignore-not-found 2>/dev/null
 sleep 5
 phase "RECOVERY" 30
 echo "✓ Scenario 1 complete"
