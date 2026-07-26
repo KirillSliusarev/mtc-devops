@@ -77,33 +77,16 @@ echo "╚═══════════════════════�
 
 phase "BASELINE (normal)" 30
 
-echo "  >>> INJECTING 5s latency on backend <<<"
-cat <<YAML | kubectl apply -f -
-apiVersion: networking.istio.io/v1beta1
-kind: VirtualService
-metadata:
-  name: backend-latency
-  namespace: ${NAMESPACE}
-spec:
-  hosts:
-  - backend
-  http:
-  - fault:
-      delay:
-        percentage: {value: 100}
-        fixedDelay: 5s
-    route:
-    - destination:
-        host: backend
-        port:
-          number: 5000
-YAML
+echo "  >>> INJECTING 5s backend delay (DB_DELAY_MS=5000) <<<"
+kubectl set env deployment/backend -n "${NAMESPACE}" DB_DELAY_MS=5000
+kubectl rollout status deployment/backend -n "${NAMESPACE}" --timeout=60s 2>/dev/null
 sleep 5
 
 phase "WITH FAULT INJECTION (5s delay)" 180
 
 echo "  >>> ROLLING BACK <<<"
-kubectl delete virtualservice backend-latency -n "${NAMESPACE}" --ignore-not-found 2>/dev/null
+kubectl set env deployment/backend -n "${NAMESPACE}" DB_DELAY_MS=0
+kubectl rollout status deployment/backend -n "${NAMESPACE}" --timeout=60s 2>/dev/null
 sleep 5
 phase "RECOVERY" 30
 echo "✓ Scenario 1 complete"

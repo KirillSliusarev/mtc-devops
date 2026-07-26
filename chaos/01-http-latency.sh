@@ -2,18 +2,17 @@
 # NO set -e
 
 # =============================================================================
-# Сценарий 1: HTTP Latency — задержка HTTP-ответа backend
-# Mesh-level VirtualService delay на host=backend (sidecar перехватывает)
-# Это добавляет задержку к HTTP-ответу ОТ backend.
-# P95 Response Time на Grafana чётко покажет spike.
+# Сценарий 1: HTTP Latency — замедление backend (5s)
+# Применяется через env BACKEND_DELAY_MS: backend спит перед HTTP-ответом.
+# P95 Response Time на Grafana покажет чёткий spike до ~5000ms.
+# Отличается от сценария 3 (DB Latency, 2000ms) по амплитуде.
 # =============================================================================
 
 NAMESPACE="demo-app"
-DELAY="5s"
-PERCENT="100"
+DELAY_MS="5000"
 
 echo "╔══════════════════════════════════════════════════════════╗"
-echo "║  СЦЕНАРИЙ 1: HTTP Latency (frontend → backend)          ║"
+echo "║  СЦЕНАРИЙ 1: HTTP Latency (5s на запрос)                ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
 echo "ОТКРОЙ В БРАУЗЕРЕ:"
@@ -29,42 +28,23 @@ echo ""
 echo ">>> Нажми Enter чтобы внедрить задержку <<<"
 read -r
 
-echo "Внедрение задержки ${DELAY} на все запросы к backend..."
-# Mesh-level VirtualService: Istio sidecar applies delay on inbound traffic to backend
-kubectl apply -f - <<EOF
-apiVersion: networking.istio.io/v1beta1
-kind: VirtualService
-metadata:
-  name: backend-latency
-  namespace: ${NAMESPACE}
-spec:
-  hosts:
-  - backend
-  http:
-  - fault:
-      delay:
-        percentage:
-          value: ${PERCENT}
-        fixedDelay: ${DELAY}
-    route:
-    - destination:
-        host: backend
-        port:
-          number: 5000
-EOF
-sleep 5
+echo "Внедрение задержки ${DELAY_MS}ms на все запросы backend..."
+kubectl set env deployment/backend -n "${NAMESPACE}" DB_DELAY_MS="${DELAY_MS}"
+kubectl rollout status deployment/backend -n "${NAMESPACE}" --timeout=60s 2>/dev/null
+sleep 3
 
-echo "Готово! Задержка ${DELAY} активна."
+echo "Готово!"
 echo ""
 echo "СМОТРИ В БРАУЗЕР:"
-echo "  📊 Приложение: загрузка займёт ~${DELAY}"
-echo "  📈 Grafana → Chaos Engineering Demo → Backend P95 Response Time:"
-echo "     spike до ~${DELAY}"
+echo "  📊 Приложение: загрузка займёт ~${DELAY_MS}ms"
+echo "  📈 Grafana → Chaos Engineering Demo → P95 Response Time:"
+echo "     spike до ~${DELAY_MS}ms"
 echo ""
 echo ">>> Нажми Enter чтобы откатить <<<"
 read -r
 
-kubectl delete virtualservice backend-latency -n "${NAMESPACE}" --ignore-not-found 2>/dev/null
+kubectl set env deployment/backend -n "${NAMESPACE}" DB_DELAY_MS="0"
+kubectl rollout status deployment/backend -n "${NAMESPACE}" --timeout=60s 2>/dev/null
 sleep 3
 echo "Задержка снята."
 echo ""
